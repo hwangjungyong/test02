@@ -1,0 +1,1171 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "MCP API Server",
+    "description": "News API, Last.fm API, Google Books API 프록시 서버\n\n## 🔐 인증 방법 (둘 중 하나만 선택!) ⭐\n\n이 API는 **두 가지 인증 방법**을 지원합니다. **둘 다 입력할 필요 없고, 용도에 맞는 하나만 선택**해서 사용하세요!\n\n### 1️⃣ API 키 (ApiKeyAuth) - 외부에서 API 호출 시 ⭐ 추천\n\n**용도**: 외부 애플리케이션, Postman, curl, 다른 서버에서 API를 호출할 때\n\n**API 키 생성**:\n1. 웹 앱(`http://localhost:5173`)에 로그인\n2. \"사용자 관리하기\" → \"API 키 관리\" 탭\n3. \"➕ 새 API 키 생성\" 버튼 클릭\n4. 생성된 API 키를 안전한 곳에 저장 (한 번만 표시됨)\n\n**Swagger UI에서 사용**:\n- 상단 \"Authorize\" 버튼 클릭\n- **ApiKeyAuth** 필드에 생성한 API 키 입력\n- \"Authorize\" 클릭\n\n**예제**:\n```bash\ncurl -H \"X-API-Key: YOUR_API_KEY\" \\\n  http://localhost:3001/api/news?q=AI\n```\n\n### 2️⃣ JWT 토큰 (BearerAuth) - 웹 앱 개발 시\n\n**용도**: 웹 앱(`http://localhost:5173`)에서 로그인한 사용자가 API를 호출할 때\n\n**토큰 획득**:\n1. 웹 앱에서 로그인\n2. 브라우저 개발자 도구(F12) → Application → Local Storage → `authToken` 확인\n\n**Swagger UI에서 사용**:\n- 상단 \"Authorize\" 버튼 클릭\n- **BearerAuth** 필드에 JWT 토큰 입력\n- \"Authorize\" 클릭\n\n**예제**:\n```bash\ncurl -H \"Authorization: Bearer YOUR_JWT_TOKEN\" \\\n  http://localhost:3001/api/news?q=AI\n```\n\n### 💡 중요 사항\n\n- **외부에서 API를 테스트할 때**: **ApiKeyAuth만** 사용하면 됩니다! (JWT 토큰은 입력하지 않아도 됨)\n- **웹 앱 개발 시**: **BearerAuth** (JWT 토큰)를 사용합니다\n- **둘 다 입력할 필요 없습니다** - 용도에 맞는 하나만 선택하세요\n- 대부분의 API는 인증이 선택사항입니다 (인증 없이도 호출 가능)\n- 데이터 저장 API (`/api/user/*`)는 인증이 필수입니다",
+    "version": "1.0.0",
+    "contact": {
+      "email": "darkponier@naver.com"
+    }
+  },
+  "servers": [
+    {
+      "url": "http://localhost:3001",
+      "description": "로컬 개발 서버"
+    }
+  ],
+  "paths": {
+    "/api/news": {
+      "get": {
+        "summary": "AI 뉴스 검색",
+        "description": "키워드를 입력받아 AI 관련 뉴스 기사를 검색합니다. 최근 일주일(7일) 이내의 기사만 검색하며, 일주일치 전체 기사를 가져옵니다 (최대 1000개).",
+        "operationId": "searchAINews",
+        "tags": ["News"],
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": true,
+            "description": "검색 키워드",
+            "schema": {
+              "type": "string",
+              "example": "AI"
+            }
+          },
+          {
+            "name": "api_key",
+            "in": "query",
+            "required": false,
+            "description": "API 키 (선택사항, 헤더 사용 권장)",
+            "schema": {
+              "type": "string",
+              "example": "sk_abc123..."
+            }
+          }
+        ],
+        "security": [
+          {
+            "ApiKeyAuth": []
+          },
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "성공",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "example": "ok"
+                    },
+                    "totalResults": {
+                      "type": "integer",
+                      "example": 100
+                    },
+                    "articles": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Article"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "잘못된 요청",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "서버 오류",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/news/economy": {
+      "get": {
+        "summary": "경제 뉴스 검색",
+        "description": "경제 관련 뉴스 기사를 검색합니다. 최근 2주(14일) 이내의 기사만 검색하며, 최대 50건의 뉴스를 가져옵니다.",
+        "operationId": "searchEconomyNews",
+        "tags": ["News"],
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": true,
+            "description": "검색 키워드",
+            "schema": {
+              "type": "string",
+              "example": "경제"
+            }
+          },
+          {
+            "name": "api_key",
+            "in": "query",
+            "required": false,
+            "description": "API 키 (선택사항, 헤더 사용 권장)",
+            "schema": {
+              "type": "string",
+              "example": "sk_abc123..."
+            }
+          }
+        ],
+        "security": [
+          {
+            "ApiKeyAuth": []
+          },
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "성공",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "example": "ok"
+                    },
+                    "totalResults": {
+                      "type": "integer",
+                      "example": 50
+                    },
+                    "articles": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Article"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "잘못된 요청",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "서버 오류",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/music/recommend": {
+      "get": {
+        "summary": "음악 추천",
+        "description": "노래 제목과 아티스트를 입력받아 유사한 추천 노래 목록을 제공합니다.",
+        "operationId": "recommendMusic",
+        "tags": ["Music"],
+        "parameters": [
+          {
+            "name": "songTitle",
+            "in": "query",
+            "required": true,
+            "description": "노래 제목",
+            "schema": {
+              "type": "string",
+              "example": "Dynamite"
+            }
+          },
+          {
+            "name": "artist",
+            "in": "query",
+            "required": false,
+            "description": "아티스트 이름",
+            "schema": {
+              "type": "string",
+              "example": "BTS"
+            }
+          },
+          {
+            "name": "api_key",
+            "in": "query",
+            "required": false,
+            "description": "API 키 (선택사항, 헤더 사용 권장)",
+            "schema": {
+              "type": "string",
+              "example": "sk_abc123..."
+            }
+          }
+        ],
+        "security": [
+          {
+            "ApiKeyAuth": []
+          },
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "성공",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "similartracks": {
+                      "type": "object",
+                      "properties": {
+                        "track": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/components/schemas/Track"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "잘못된 요청",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "서버 오류",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/music/radio/current": {
+      "get": {
+        "summary": "현재 재생 중인 노래",
+        "description": "인기 차트에서 현재 재생 중인 노래를 조회합니다.",
+        "operationId": "getCurrentRadioSong",
+        "tags": ["Music"],
+        "parameters": [
+          {
+            "name": "station",
+            "in": "query",
+            "required": false,
+            "description": "방송국",
+            "schema": {
+              "type": "string",
+              "default": "kbs",
+              "example": "kbs"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "가져올 개수",
+            "schema": {
+              "type": "string",
+              "default": "1",
+              "example": "5"
+            }
+          },
+          {
+            "name": "api_key",
+            "in": "query",
+            "required": false,
+            "description": "API 키 (선택사항, 헤더 사용 권장)",
+            "schema": {
+              "type": "string",
+              "example": "sk_abc123..."
+            }
+          }
+        ],
+        "security": [
+          {
+            "ApiKeyAuth": []
+          },
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "성공",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "tracks": {
+                      "type": "object",
+                      "properties": {
+                        "track": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/components/schemas/Track"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "서버 오류",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/music/radio/recent": {
+      "get": {
+        "summary": "최근 재생된 노래",
+        "description": "인기 차트에서 최근 재생된 노래 목록을 조회합니다.",
+        "operationId": "getRecentRadioSongs",
+        "tags": ["Music"],
+        "parameters": [
+          {
+            "name": "station",
+            "in": "query",
+            "required": false,
+            "description": "방송국",
+            "schema": {
+              "type": "string",
+              "default": "kbs",
+              "example": "kbs"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "가져올 개수",
+            "schema": {
+              "type": "string",
+              "default": "10",
+              "example": "10"
+            }
+          },
+          {
+            "name": "api_key",
+            "in": "query",
+            "required": false,
+            "description": "API 키 (선택사항, 헤더 사용 권장)",
+            "schema": {
+              "type": "string",
+              "example": "sk_abc123..."
+            }
+          }
+        ],
+        "security": [
+          {
+            "ApiKeyAuth": []
+          },
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "성공",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "tracks": {
+                      "type": "object",
+                      "properties": {
+                        "track": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/components/schemas/Track"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "서버 오류",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/books/search": {
+      "get": {
+        "summary": "도서 검색",
+        "description": "키워드를 입력받아 Google Books API에서 도서를 검색합니다.",
+        "operationId": "searchBooks",
+        "tags": ["Books"],
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": true,
+            "description": "검색 키워드",
+            "schema": {
+              "type": "string",
+              "example": "AI"
+            }
+          },
+          {
+            "name": "maxResults",
+            "in": "query",
+            "required": false,
+            "description": "최대 결과 개수",
+            "schema": {
+              "type": "string",
+              "default": "10",
+              "example": "10"
+            }
+          },
+          {
+            "name": "api_key",
+            "in": "query",
+            "required": false,
+            "description": "API 키 (선택사항, 헤더 사용 권장)",
+            "schema": {
+              "type": "string",
+              "example": "sk_abc123..."
+            }
+          }
+        ],
+        "security": [
+          {
+            "ApiKeyAuth": []
+          },
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "성공",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "example": "ok"
+                    },
+                    "totalItems": {
+                      "type": "integer",
+                      "example": 100
+                    },
+                    "books": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Book"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "잘못된 요청",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "서버 오류",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/books/recommend": {
+      "get": {
+        "summary": "AI 도서 추천",
+        "description": "사용자 입력을 AI가 분석하여 관련 도서를 추천합니다. Google Books API를 사용하여 실제 도서 정보를 가져옵니다.",
+        "operationId": "recommendBooks",
+        "tags": ["Books"],
+        "parameters": [
+          {
+            "name": "query",
+            "in": "query",
+            "required": true,
+            "description": "사용자 입력 (키워드 또는 자연어 설명)",
+            "schema": {
+              "type": "string",
+              "example": "머신러닝"
+            }
+          },
+          {
+            "name": "category",
+            "in": "query",
+            "required": false,
+            "description": "카테고리 (예: computers, science, technology)",
+            "schema": {
+              "type": "string",
+              "example": "computers"
+            }
+          },
+          {
+            "name": "api_key",
+            "in": "query",
+            "required": false,
+            "description": "API 키 (선택사항, 헤더 사용 권장)",
+            "schema": {
+              "type": "string",
+              "example": "sk_abc123..."
+            }
+          }
+        ],
+        "security": [
+          {
+            "ApiKeyAuth": []
+          },
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "성공",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "totalItems": {
+                      "type": "integer",
+                      "example": 10
+                    },
+                    "books": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Book"
+                      }
+                    },
+                    "analyzedKeywords": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      },
+                      "example": ["머신러닝", "AI"]
+                    },
+                    "userQuery": {
+                      "type": "string",
+                      "example": "머신러닝"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "잘못된 요청",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "서버 오류",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/api-keys": {
+      "post": {
+        "summary": "API 키 생성",
+        "description": "새로운 API 키를 생성합니다. 생성된 API 키는 한 번만 표시되므로 안전한 곳에 저장하세요.",
+        "operationId": "createApiKey",
+        "tags": ["API Keys"],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["name"],
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "description": "API 키 이름",
+                    "example": "프로덕션 키"
+                  },
+                  "description": {
+                    "type": "string",
+                    "description": "API 키 설명",
+                    "example": "외부 애플리케이션에서 사용"
+                  },
+                  "expiresInDays": {
+                    "type": "integer",
+                    "description": "만료일 (일수)",
+                    "example": 30
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "API 키 생성 성공",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "API 키가 생성되었습니다."
+                    },
+                    "apiKey": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "integer",
+                          "example": 1
+                        },
+                        "apiKey": {
+                          "type": "string",
+                          "example": "sk_abc123def456..."
+                        },
+                        "name": {
+                          "type": "string",
+                          "example": "프로덕션 키"
+                        },
+                        "createdAt": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "expiresAt": {
+                          "type": "string",
+                          "format": "date-time"
+                        }
+                      }
+                    },
+                    "warning": {
+                      "type": "string",
+                      "example": "이 API 키는 이번에만 표시됩니다. 안전한 곳에 저장하세요."
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "인증 실패",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "summary": "API 키 목록 조회",
+        "description": "현재 사용자의 API 키 목록을 조회합니다. 보안을 위해 전체 API 키는 마스킹되어 표시됩니다.",
+        "operationId": "listApiKeys",
+        "tags": ["API Keys"],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "성공",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "apiKeys": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "integer",
+                            "example": 1
+                          },
+                          "apiKey": {
+                            "type": "string",
+                            "description": "마스킹된 API 키",
+                            "example": "sk_abc123...xyz9"
+                          },
+                          "name": {
+                            "type": "string",
+                            "example": "프로덕션 키"
+                          },
+                          "isActive": {
+                            "type": "boolean",
+                            "example": true
+                          },
+                          "lastUsedAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "createdAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "인증 실패",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/api-keys/{id}": {
+      "delete": {
+        "summary": "API 키 삭제",
+        "description": "API 키를 삭제합니다. 삭제된 API 키는 복구할 수 없습니다.",
+        "operationId": "deleteApiKey",
+        "tags": ["API Keys"],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "API 키 ID",
+            "schema": {
+              "type": "integer",
+              "example": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "삭제 성공",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "API 키가 삭제되었습니다."
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "인증 실패",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "API 키를 찾을 수 없음",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/api-keys/{id}/toggle": {
+      "put": {
+        "summary": "API 키 활성화/비활성화",
+        "description": "API 키를 활성화하거나 비활성화합니다. 비활성화된 API 키는 사용할 수 없습니다.",
+        "operationId": "toggleApiKey",
+        "tags": ["API Keys"],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "API 키 ID",
+            "schema": {
+              "type": "integer",
+              "example": 1
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["isActive"],
+                "properties": {
+                  "isActive": {
+                    "type": "boolean",
+                    "description": "활성화 여부",
+                    "example": true
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "성공",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "API 키가 활성화되었습니다."
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "인증 실패",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "API 키를 찾을 수 없음",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "ApiKeyAuth": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-API-Key",
+        "description": "🔑 **외부에서 API를 호출할 때 사용하는 API 키**\n\n- 웹 UI에서 생성한 API 키를 여기에 입력하세요\n- 헤더 형식: `X-API-Key: YOUR_API_KEY`\n- 또는 `Authorization: ApiKey YOUR_API_KEY` 형식도 가능\n- **외부 애플리케이션에서 API를 테스트할 때 주로 사용**"
+      },
+      "BearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "description": "🔐 **웹 앱에서 로그인할 때 발급받는 JWT 토큰**\n\n- 웹 앱(`http://localhost:5173`)에서 로그인하면 발급됩니다\n- 브라우저 개발자 도구(F12) → Application → Local Storage → `authToken`에서 확인 가능\n- **웹 앱 개발 시 사용**\n\n💡 **참고**: 외부에서 API를 테스트할 때는 **ApiKeyAuth**만 사용하면 됩니다!"
+      }
+    },
+    "schemas": {
+      "Article": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string",
+            "description": "기사 제목",
+            "example": "AI 기술의 최신 동향"
+          },
+          "description": {
+            "type": "string",
+            "description": "기사 요약",
+            "example": "인공지능 기술이 빠르게 발전하고 있습니다..."
+          },
+          "url": {
+            "type": "string",
+            "format": "uri",
+            "description": "기사 링크",
+            "example": "https://example.com/news/123"
+          },
+          "publishedAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "발행일시",
+            "example": "2025-01-09T10:30:00Z"
+          },
+          "source": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "description": "출처 이름",
+                "example": "조선일보"
+              }
+            }
+          },
+          "content": {
+            "type": "string",
+            "description": "기사 내용",
+            "example": "전체 기사 내용..."
+          }
+        }
+      },
+      "Track": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "노래 제목",
+            "example": "Dynamite"
+          },
+          "artist": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "description": "아티스트 이름",
+                "example": "BTS"
+              }
+            }
+          },
+          "playcount": {
+            "type": "string",
+            "description": "재생 횟수",
+            "example": "1234567"
+          },
+          "url": {
+            "type": "string",
+            "format": "uri",
+            "description": "트랙 링크",
+            "example": "https://www.last.fm/music/BTS/_/Dynamite"
+          }
+        }
+      },
+      "Error": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string",
+            "description": "오류 메시지",
+            "example": "검색 키워드가 필요합니다."
+          },
+          "status": {
+            "type": "integer",
+            "description": "HTTP 상태 코드",
+            "example": 400
+          }
+        }
+      },
+      "Book": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "도서 ID",
+            "example": "abc123"
+          },
+          "title": {
+            "type": "string",
+            "description": "도서 제목",
+            "example": "머신러닝 입문"
+          },
+          "authors": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "저자 목록",
+            "example": ["홍길동", "김철수"]
+          },
+          "publisher": {
+            "type": "string",
+            "description": "출판사",
+            "example": "한빛미디어"
+          },
+          "publishedDate": {
+            "type": "string",
+            "description": "출판일",
+            "example": "2024-01-01"
+          },
+          "description": {
+            "type": "string",
+            "description": "도서 설명",
+            "example": "머신러닝의 기초부터..."
+          },
+          "categories": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "카테고리 목록",
+            "example": ["Computers", "Technology"]
+          },
+          "pageCount": {
+            "type": "integer",
+            "description": "페이지 수",
+            "example": 300
+          },
+          "language": {
+            "type": "string",
+            "description": "언어",
+            "example": "ko"
+          },
+          "previewLink": {
+            "type": "string",
+            "format": "uri",
+            "description": "미리보기 링크",
+            "example": "https://books.google.com/..."
+          },
+          "infoLink": {
+            "type": "string",
+            "format": "uri",
+            "description": "상세 정보 링크",
+            "example": "https://books.google.com/..."
+          },
+          "thumbnail": {
+            "type": "string",
+            "format": "uri",
+            "description": "썸네일 이미지 URL",
+            "example": "http://books.google.com/books/content..."
+          },
+          "averageRating": {
+            "type": "number",
+            "description": "평균 평점",
+            "example": 4.5
+          },
+          "ratingsCount": {
+            "type": "integer",
+            "description": "평가 수",
+            "example": 120
+          }
+        }
+      }
+    }
+  }
+}
+

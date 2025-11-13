@@ -1,0 +1,29 @@
+{
+  "mcpServers": {
+    "ai-articles-radio-server": {
+      "command": "node",
+      "args": ["C:/test/test02/mcp-server.js"],
+      "cwd": "C:/test/test02",
+      "description": "AI 기사 검색 및 라디오 방송 음악 정보 서버",
+      "tools": [
+        "search_ai_articles",
+        "get_radio_song",
+        "get_radio_recent_songs",
+        "recommend_similar_songs"
+      ]
+    },
+    "unified-mcp-server": {
+      "command": "python",
+      "args": ["C:/test/test02/mcp-unified-server.py"],
+      "cwd": "C:/test/test02",
+      "description": "덧셈 계산기 및 도서 검색/추천 통합 서버",
+      "tools": [
+        "add_numbers",
+        "recommend_books",
+        "get_popular_books",
+        "get_book_details"
+      ]
+    }
+  }
+}
+

@@ -1,0 +1,42 @@
+{
+  "name": "test02",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "dev:all": "concurrently \"npm run api-server\" \"npm run dev\"",
+    "start:all": "concurrently -n \"API,MCP,PythonHTTP,UnifiedMCP,Vite\" -c \"cyan,magenta,yellow,green,blue\" \"npm run api-server\" \"npm run mcp-server\" \"npm run screen-validator-server\" \"npm run mcp-unified\" \"npm run dev\"",
+    "build": "vite build",
+    "preview": "vite preview",
+    "mcp-server": "node mcp-server.js",
+    "mcp-unified": "python mcp-unified-server.py",
+    "mcp-build": "pip install mcp && python mcp-unified-server.py",
+    "api-server": "node api-server.js",
+    "screen-validator-server": "python mcp-screen-validator-http-server.py",
+    "start:servers": "npm run api-server & npm run mcp-server",
+    "start:mcp-unified": "python mcp-unified-server.py",
+    "version": "node scripts/version-bump.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.21.1",
+    "axios": "^1.13.2",
+    "bcryptjs": "^3.0.3",
+    "dotenv": "^17.2.3",
+    "express-validator": "^7.3.0",
+    "https-proxy-agent": "^7.0.6",
+    "jsonwebtoken": "^9.0.2",
+    "marked": "^17.0.0",
+    "pinia": "^3.0.4",
+    "sql.js": "^1.13.0",
+    "vis-network": "^10.0.2",
+    "vue": "^3.4.21",
+    "vue-router": "^4.6.3"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^5.0.4",
+    "concurrently": "^9.2.1",
+    "swagger-ui-dist": "^5.30.2",
+    "vite": "^5.1.6"
+  }
+}
