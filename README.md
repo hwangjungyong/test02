@@ -33,9 +33,21 @@ JWT_EXPIRES_IN=7d
 start-dev.bat
 ```
 
-또는 개발 환경만 실행:
+**자동 실행 설정 (부팅 시 자동 시작):**
 ```bash
-start-dev.bat
+install-auto-start.bat
+```
+이 스크립트를 실행하면 Windows 시작 프로그램에 등록되어 컴퓨터 부팅 시 자동으로 서버가 시작됩니다.
+
+**서버 자동 재시작 (항상 실행 유지):**
+```bash
+auto-start-servers.bat
+```
+서버가 종료되면 자동으로 재시작합니다.
+
+**모든 서버 종료:**
+```bash
+stop-all-servers.bat
 ```
 
 ### 4. 브라우저 접속
