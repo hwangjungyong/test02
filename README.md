@@ -125,7 +125,39 @@ npm run api-server             # API 서버 실행
 npm run mcp-server             # Node.js MCP 서버 실행
 npm run mcp-unified            # Python MCP 서버 실행
 npm run screen-validator-server # Python HTTP 서버 실행
+npm run build                  # 프론트엔드 빌드
 ```
+
+## 🐳 Docker 빌드 및 배포
+
+### 빠른 시작
+
+```bash
+# 빌드 및 배포
+scripts\docker-build.bat       # Windows
+scripts\docker-deploy.bat      # Windows
+
+./scripts/docker-build.sh      # Linux/macOS
+./scripts/docker-deploy.sh     # Linux/macOS
+```
+
+### Docker 명령어
+
+```bash
+# 프로덕션 빌드 및 실행
+docker-compose up -d --build
+
+# 개발 환경 실행
+docker-compose -f docker-compose.dev.yml up -d
+
+# 서비스 중지
+docker-compose down
+
+# 로그 확인
+docker-compose logs -f
+```
+
+> **📖 상세 가이드**: [`docs/Docker_빌드_배포_가이드.md`](./docs/Docker_빌드_배포_가이드.md) - Docker 빌드 및 배포 완전 가이드
 
 ## 🔑 API 키 사용
 

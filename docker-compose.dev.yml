@@ -1,0 +1,55 @@
+version: '3.8'
+
+# 개발 환경용 docker-compose 설정
+# 개발 모드로 실행 (핫 리로드, 디버깅 등)
+
+services:
+  # 프론트엔드 개발 서버
+  frontend-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend.dev
+    container_name: test02-frontend-dev
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./src:/app/src
+      - ./public:/app/public
+      - ./index.html:/app/index.html
+      - ./vite.config.js:/app/vite.config.js
+    environment:
+      - NODE_ENV=development
+    command: npm run dev -- --host
+    restart: unless-stopped
+    networks:
+      - test02-network
+
+  # 백엔드 개발 서버
+  backend-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend.dev
+    container_name: test02-backend-dev
+    ports:
+      - "3001:3001"
+    volumes:
+      - ./api-server.js:/app/api-server.js
+      - ./database.js:/app/database.js
+      - ./data:/app/data
+      - ./swagger.json:/app/swagger.json
+    environment:
+      - NODE_ENV=development
+      - API_SERVER_PORT=3001
+      - NEWS_API_KEY=${NEWS_API_KEY}
+      - LASTFM_API_KEY=${LASTFM_API_KEY}
+      - JWT_SECRET=${JWT_SECRET:-dev-secret-key}
+      - JWT_EXPIRES_IN=${JWT_EXPIRES_IN:-7d}
+    command: node --watch api-server.js
+    restart: unless-stopped
+    networks:
+      - test02-network
+
+networks:
+  test02-network:
+    driver: bridge
+

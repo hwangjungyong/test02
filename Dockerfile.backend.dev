@@ -1,0 +1,18 @@
+# Node.js 백엔드 개발용 Dockerfile
+FROM node:20-alpine
+
+# 작업 디렉토리 설정
+WORKDIR /app
+
+# package.json과 package-lock.json 복사
+COPY package*.json ./
+
+# 모든 의존성 설치 (개발 의존성 포함)
+RUN npm install
+
+# 포트 노출
+EXPOSE 3001
+
+# 개발 서버 시작 (watch 모드)
+CMD ["node", "--watch", "api-server.js"]
+

@@ -1,0 +1,56 @@
+# Node.js
+node_modules
+npm-debug.log
+yarn-error.log
+
+# 빌드 결과물
+dist
+build
+*.log
+
+# 환경 변수
+.env
+.env.local
+.env.*.local
+
+# Git
+.git
+.gitignore
+.gitattributes
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# 문서 (선택사항 - 필요시 제거)
+*.md
+docs/
+
+# 테스트
+coverage
+.nyc_output
+
+# 기타
+*.bat
+*.sh
+*.ps1
+flags
+python
+node
+test02@0.0.0
+vite
+
+# 데이터베이스 백업 (프로덕션에서는 제외)
+data/*.db.backup
+
+# 임시 파일
+*.tmp
+*.temp
+
