@@ -28,104 +28,16 @@
     </div>
 
     <!-- 로그인 모달 -->
-    <div v-if="showLoginModal" class="modal-overlay" @click="showLoginModal = false">
-      <div class="modal-content auth-modal" @click.stop>
-        <div class="modal-header">
-          <h2>🔐 로그인</h2>
-          <button @click="showLoginModal = false" class="btn-close">✕</button>
-        </div>
-        <div class="modal-body">
-          <form @submit.prevent="handleLogin" class="auth-form">
-            <div class="form-group">
-              <label>이메일</label>
-              <input 
-                v-model="loginForm.email" 
-                type="email" 
-                placeholder="이메일을 입력하세요"
-                required
-                class="form-input"
-              />
-            </div>
-            <div class="form-group">
-              <label>비밀번호</label>
-              <input 
-                v-model="loginForm.password" 
-                type="password" 
-                placeholder="비밀번호를 입력하세요"
-                required
-                class="form-input"
-              />
-            </div>
-            <div v-if="authError" class="error-message">
-              {{ authError }}
-            </div>
-            <div class="form-actions">
-              <button type="submit" class="btn btn-primary" :disabled="authStore.isLoading">
-                {{ authStore.isLoading ? '로그인 중...' : '로그인' }}
-              </button>
-              <button type="button" @click="showLoginModal = false" class="btn btn-secondary">
-                취소
-              </button>
-            </div>
-          </form>
-        </div>
-      </div>
-    </div>
+    <LoginModal 
+      v-model="showLoginModal" 
+      @success="handleAuthSuccess"
+    />
 
     <!-- 회원가입 모달 -->
-    <div v-if="showSignupModal" class="modal-overlay" @click="showSignupModal = false">
-      <div class="modal-content auth-modal" @click.stop>
-        <div class="modal-header">
-          <h2>📝 회원가입</h2>
-          <button @click="showSignupModal = false" class="btn-close">✕</button>
-        </div>
-        <div class="modal-body">
-          <form @submit.prevent="handleSignup" class="auth-form">
-            <div class="form-group">
-              <label>이메일</label>
-              <input 
-                v-model="signupForm.email" 
-                type="email" 
-                placeholder="이메일을 입력하세요"
-                required
-                class="form-input"
-              />
-            </div>
-            <div class="form-group">
-              <label>비밀번호</label>
-              <input 
-                v-model="signupForm.password" 
-                type="password" 
-                placeholder="비밀번호를 입력하세요 (최소 6자)"
-                required
-                minlength="6"
-                class="form-input"
-              />
-            </div>
-            <div class="form-group">
-              <label>이름 (선택사항)</label>
-              <input 
-                v-model="signupForm.name" 
-                type="text" 
-                placeholder="이름을 입력하세요"
-                class="form-input"
-              />
-            </div>
-            <div v-if="authError" class="error-message">
-              {{ authError }}
-            </div>
-            <div class="form-actions">
-              <button type="submit" class="btn btn-primary" :disabled="authStore.isLoading">
-                {{ authStore.isLoading ? '가입 중...' : '회원가입' }}
-              </button>
-              <button type="button" @click="showSignupModal = false" class="btn btn-secondary">
-                취소
-              </button>
-            </div>
-          </form>
-        </div>
-      </div>
-    </div>
+    <SignupModal 
+      v-model="showSignupModal" 
+      @success="handleAuthSuccess"
+    />
 
     <!-- 사용자 관리 모달 -->
     <div v-if="showUserManagementModal" class="modal-overlay" @click="showUserManagementModal = false">
@@ -1715,14 +1627,18 @@
 </template>
 
 <script setup>
+import { ref, computed, onMounted, watch, nextTick, onBeforeUnmount } from 'vue'
+import { marked } from 'marked'
+import { Network } from 'vis-network'
 import { useAuthStore } from './stores/auth.js'
+import LoginModal from './components/LoginModal.vue'
+import SignupModal from './components/SignupModal.vue'
 
 const authStore = useAuthStore()
 
 // 인증 모달 상태
 const showLoginModal = ref(false)
 const showSignupModal = ref(false)
-const authError = ref('')
 
 // 사용자 관리 모달
 const showUserManagementModal = ref(false)
@@ -1759,48 +1675,10 @@ const profileForm = ref({
   name: ''
 })
 
-// 로그인 폼
-const loginForm = ref({
-  email: '',
-  password: ''
-})
-
-// 회원가입 폼
-const signupForm = ref({
-  email: '',
-  password: '',
-  name: ''
-})
-
-// 로그인 처리
-async function handleLogin() {
-  authError.value = ''
-  const result = await authStore.login(loginForm.value.email, loginForm.value.password)
-  
-  if (result.success) {
-    showLoginModal.value = false
-    loginForm.value = { email: '', password: '' }
-    alert('로그인 성공!')
-  } else {
-    authError.value = result.error || '로그인에 실패했습니다.'
-  }
-}
-
-// 회원가입 처리
-async function handleSignup() {
-  authError.value = ''
-  const result = await authStore.signup(
-    signupForm.value.email, 
-    signupForm.value.password, 
-    signupForm.value.name
-  )
-  
-  if (result.success) {
-    showSignupModal.value = false
-    signupForm.value = { email: '', password: '', name: '' }
-    alert('회원가입 성공!')
-  } else {
-    authError.value = result.error || '회원가입에 실패했습니다.'
+// 인증 성공 처리 (컴포넌트에서 호출)
+function handleAuthSuccess(message) {
+  if (message) {
+    alert(message)
   }
 }
 
@@ -2196,10 +2074,6 @@ async function toggleApiKey(keyId, isActive) {
  * 
  * 포트: http://localhost:5173
  */
-
-import { ref, computed, onMounted, watch, nextTick, onBeforeUnmount } from 'vue'
-import { marked } from 'marked'
-import { Network } from 'vis-network'
 
 // ============================================
 // Marked 설정

@@ -1,0 +1,79 @@
+<template>
+  <div v-if="modelValue" class="modal-overlay" @click="$emit('update:modelValue', false)">
+    <div class="modal-content auth-modal" @click.stop>
+      <div class="modal-header">
+        <h2>🔐 로그인</h2>
+        <button @click="$emit('update:modelValue', false)" class="btn-close">✕</button>
+      </div>
+      <div class="modal-body">
+        <form @submit.prevent="handleSubmit" class="auth-form">
+          <div class="form-group">
+            <label>이메일</label>
+            <input 
+              v-model="form.email" 
+              type="email" 
+              placeholder="이메일을 입력하세요"
+              required
+              class="form-input"
+            />
+          </div>
+          <div class="form-group">
+            <label>비밀번호</label>
+            <input 
+              v-model="form.password" 
+              type="password" 
+              placeholder="비밀번호를 입력하세요"
+              required
+              class="form-input"
+            />
+          </div>
+          <div v-if="error" class="error-message">
+            {{ error }}
+          </div>
+          <div class="form-actions">
+            <button type="submit" class="btn btn-primary" :disabled="isLoading">
+              {{ isLoading ? '로그인 중...' : '로그인' }}
+            </button>
+            <button type="button" @click="$emit('update:modelValue', false)" class="btn btn-secondary">
+              취소
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</template>
+
+<script setup>
+import { ref, computed } from 'vue'
+import { useAuthStore } from '../stores/auth.js'
+
+const props = defineProps({
+  modelValue: {
+    type: Boolean,
+    default: false
+  }
+})
+
+const emit = defineEmits(['update:modelValue', 'success'])
+
+const authStore = useAuthStore()
+const form = ref({ email: '', password: '' })
+const error = ref('')
+
+const isLoading = computed(() => authStore.isLoading)
+
+async function handleSubmit() {
+  error.value = ''
+  const result = await authStore.login(form.value.email, form.value.password)
+  
+  if (result.success) {
+    emit('update:modelValue', false)
+    form.value = { email: '', password: '' }
+    emit('success', '로그인 성공!')
+  } else {
+    error.value = result.error || '로그인에 실패했습니다.'
+  }
+}
+</script>
+
