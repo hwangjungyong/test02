@@ -6,6 +6,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.frontend
+      args:
+        VITE_API_BASE_URL: http://backend:3001
     container_name: test02-frontend
     ports:
       - "5173:80"
@@ -14,6 +16,12 @@ services:
     restart: unless-stopped
     networks:
       - test02-network
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
 
   # 백엔드 API 서버
   backend:
@@ -35,6 +43,12 @@ services:
     restart: unless-stopped
     networks:
       - test02-network
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3001/api-docs"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
 
   # Python MCP 통합 서버
   python-mcp:
@@ -59,6 +73,12 @@ services:
     restart: unless-stopped
     networks:
       - test02-network
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3002/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
 
 networks:
   test02-network:
@@ -67,4 +87,3 @@ networks:
 volumes:
   data:
     driver: local
-

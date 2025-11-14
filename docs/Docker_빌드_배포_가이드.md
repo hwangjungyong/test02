@@ -77,7 +77,7 @@ brew install --cask docker
 
 `.env` 파일 생성 (프로젝트 루트):
 ```env
-# API Keys
+# API Keys (필수)
 NEWS_API_KEY=your_news_api_key_here
 LASTFM_API_KEY=your_lastfm_api_key_here
 
@@ -87,7 +87,15 @@ JWT_EXPIRES_IN=7d
 
 # 서버 포트
 API_SERVER_PORT=3001
+
+# Node Environment
+NODE_ENV=production
+
+# Frontend API Base URL (Docker 내부 네트워크)
+VITE_API_BASE_URL=http://backend:3001
 ```
+
+> **참고**: `.env.docker` 파일을 참고하여 `.env` 파일을 생성할 수 있습니다.
 
 ---
 
@@ -138,6 +146,9 @@ test02/
 # 프로덕션 빌드
 scripts\docker-build.bat
 
+# 빌드 테스트 (캐시 없이)
+scripts\docker-build-test.bat
+
 # 개발 환경 빌드
 scripts\docker-build.bat dev
 ```
@@ -145,10 +156,13 @@ scripts\docker-build.bat dev
 #### Linux / macOS
 ```bash
 # 실행 권한 부여
-chmod +x scripts/docker-build.sh
+chmod +x scripts/docker-build.sh scripts/docker-build-test.sh
 
 # 프로덕션 빌드
 ./scripts/docker-build.sh
+
+# 빌드 테스트 (캐시 없이)
+./scripts/docker-build-test.sh
 
 # 개발 환경 빌드
 ./scripts/docker-build.sh dev
@@ -158,12 +172,35 @@ chmod +x scripts/docker-build.sh
 
 #### 프로덕션 빌드
 ```bash
+# 일반 빌드
 docker-compose build
+
+# 캐시 없이 빌드 (완전 재빌드)
+docker-compose build --no-cache
+
+# 특정 서비스만 빌드
+docker-compose build frontend
+docker-compose build backend
 ```
 
 #### 개발 환경 빌드
 ```bash
 docker-compose -f docker-compose.dev.yml build
+```
+
+### 빌드 최적화
+
+#### 멀티 스테이지 빌드
+- 프론트엔드는 멀티 스테이지 빌드 사용
+- 최종 이미지 크기 최소화
+
+#### 빌드 캐시 활용
+```bash
+# 캐시 사용 (빠른 빌드)
+docker-compose build
+
+# 캐시 없이 빌드 (완전 재빌드)
+docker-compose build --no-cache
 ```
 
 ### 개별 서비스 빌드

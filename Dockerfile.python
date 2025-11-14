@@ -28,6 +28,9 @@ EXPOSE 3002
 # 환경 변수 설정
 ENV PYTHONUNBUFFERED=1
 
+# 헬스체크 추가 (HTTP 서버용)
+HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
+  CMD wget --quiet --tries=1 --spider http://localhost:3002/health || exit 1
+
 # 기본 서버 시작 (docker-compose에서 오버라이드 가능)
 CMD ["python", "mcp-unified-server.py"]
-

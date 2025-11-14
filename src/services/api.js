@@ -3,7 +3,7 @@
  * 공통 에러 처리 및 응답 파싱
  */
 
-const API_BASE_URL = 'http://localhost:3001'
+import { getApiUrl } from '../config/api.js'
 
 /**
  * 기본 API 요청 함수
@@ -12,7 +12,7 @@ const API_BASE_URL = 'http://localhost:3001'
  * @returns {Promise} API 응답
  */
 export async function apiRequest(endpoint, options = {}) {
-  const url = endpoint.startsWith('http') ? endpoint : `${API_BASE_URL}${endpoint}`
+  const url = getApiUrl(endpoint)
   
   const defaultOptions = {
     headers: {

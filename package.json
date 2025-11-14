@@ -19,11 +19,14 @@
     "version": "node scripts/version-bump.js",
     "docker:build": "docker-compose build",
     "docker:build:dev": "docker-compose -f docker-compose.dev.yml build",
+    "docker:build:no-cache": "docker-compose build --no-cache",
     "docker:up": "docker-compose up -d",
     "docker:up:dev": "docker-compose -f docker-compose.dev.yml up -d",
     "docker:down": "docker-compose down",
     "docker:logs": "docker-compose logs -f",
-    "docker:deploy": "docker-compose up -d --build"
+    "docker:deploy": "docker-compose up -d --build",
+    "docker:ps": "docker-compose ps",
+    "docker:config": "docker-compose config"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.21.1",

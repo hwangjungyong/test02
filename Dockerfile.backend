@@ -14,10 +14,12 @@ RUN npm ci --only=production
 COPY api-server.js ./
 COPY database.js ./
 COPY swagger.json ./
-COPY data/ ./data/
 
-# 데이터 디렉토리 생성 (없는 경우)
+# 데이터 디렉토리 생성
 RUN mkdir -p data
+
+# 데이터 파일 복사 (있는 경우)
+COPY data/ ./data/ 2>/dev/null || true
 
 # 포트 노출
 EXPOSE 3001
@@ -26,6 +28,9 @@ EXPOSE 3001
 ENV NODE_ENV=production
 ENV API_SERVER_PORT=3001
 
+# 헬스체크 추가
+HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
+  CMD wget --quiet --tries=1 --spider http://localhost:3001/api-docs || exit 1
+
 # 서버 시작
 CMD ["node", "api-server.js"]
-
