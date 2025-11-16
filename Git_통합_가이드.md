@@ -98,7 +98,7 @@ git config --global user.email
 git config --list --global
 ```
 
----
+----------
 
 ## 3. Git 계정 정보 확인
 
