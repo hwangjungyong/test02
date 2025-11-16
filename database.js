@@ -779,6 +779,228 @@ export const apiKeyUsageDB = {
   }
 };
 
+// 데이터베이스 스키마 조회 함수
+export function getSchema() {
+  if (!db) {
+    console.error('[DB] 데이터베이스가 초기화되지 않았습니다.');
+    return {};
+  }
+  
+  const tables = ['users', 'news', 'radioSongs', 'books', 'apiKeys', 'apiKeyUsage'];
+  const schema = {};
+  
+  tables.forEach(tableName => {
+    try {
+      // sql.js에서는 PRAGMA가 제대로 작동하지 않을 수 있으므로
+      // CREATE TABLE 문을 파싱하여 스키마 정보 추출
+      const stmt = db.prepare(`
+        SELECT sql FROM sqlite_master 
+        WHERE type='table' AND name=?
+      `);
+      stmt.bind([tableName]);
+      
+      let createSql = null;
+      if (stmt.step()) {
+        const row = stmt.getAsObject();
+        createSql = row.sql;
+      }
+      stmt.free();
+      
+      if (createSql) {
+        // CREATE TABLE 문에서 컬럼 정보 추출
+        const columns = parseTableSchema(createSql);
+        schema[tableName] = columns;
+      } else {
+        // 테이블이 없으면 빈 배열
+        schema[tableName] = [];
+      }
+    } catch (error) {
+      console.error(`[DB] 테이블 ${tableName} 스키마 조회 오류:`, error);
+      // 오류 발생 시 기본 스키마 정보 반환
+      schema[tableName] = getDefaultSchema(tableName);
+    }
+  });
+  
+  return schema;
+}
+
+// CREATE TABLE 문 파싱 헬퍼 함수
+function parseTableSchema(createSql) {
+  const columns = [];
+  
+  try {
+    if (!createSql) {
+      return columns;
+    }
+    
+    // CREATE TABLE 문에서 컬럼 정의 부분 추출
+    // 여러 줄과 괄호를 고려한 정규식
+    const match = createSql.match(/CREATE\s+TABLE[^(]*\(([\s\S]+)\)/i);
+    if (!match) {
+      return columns;
+    }
+    
+    // 괄호 안의 내용 추출 (FOREIGN KEY 제약 조건 제외)
+    let columnDefs = match[1];
+    
+    // FOREIGN KEY 제약 조건 제거
+    columnDefs = columnDefs.replace(/FOREIGN\s+KEY[^,)]+/gi, '');
+    
+    // 쉼표로 분리 (단순 분리)
+    const defs = columnDefs.split(',').map(s => s.trim()).filter(s => s.length > 0);
+    let cid = 0;
+    
+    defs.forEach(def => {
+      // 빈 문자열이나 FOREIGN KEY만 있는 경우 제외
+      if (!def || def.length === 0 || def.toUpperCase().trim().startsWith('FOREIGN')) {
+        return;
+      }
+      
+      const parts = def.trim().split(/\s+/);
+      if (parts.length === 0) return;
+      
+      const name = parts[0].replace(/["`\[\]]/g, '');
+      if (!name || name.length === 0) return;
+      
+      let type = 'TEXT';
+      let notnull = false;
+      let pk = false;
+      let dflt_value = null;
+      
+      // 타입 추출
+      if (parts.length > 1) {
+        type = parts[1].toUpperCase().replace(/[()]/g, '');
+      }
+      
+      // 제약 조건 확인
+      const defUpper = def.toUpperCase();
+      notnull = defUpper.includes('NOT NULL');
+      pk = defUpper.includes('PRIMARY KEY') || (defUpper.includes('PRIMARY') && defUpper.includes('KEY'));
+      
+      // 기본값 추출
+      const defaultMatch = def.match(/DEFAULT\s+([^\s,)]+)/i);
+      if (defaultMatch) {
+        dflt_value = defaultMatch[1].replace(/['"]/g, '');
+      }
+      
+      columns.push({
+        cid: cid++,
+        name: name,
+        type: type,
+        notnull: notnull,
+        dflt_value: dflt_value,
+        pk: pk
+      });
+    });
+  } catch (error) {
+    console.error('[DB] CREATE TABLE 파싱 오류:', error);
+    console.error('[DB] CREATE SQL:', createSql);
+  }
+  
+  return columns;
+}
+
+// 기본 스키마 정보 반환 (파싱 실패 시)
+function getDefaultSchema(tableName) {
+  const defaultSchemas = {
+    users: [
+      { cid: 0, name: 'id', type: 'INTEGER', notnull: true, dflt_value: null, pk: true },
+      { cid: 1, name: 'email', type: 'TEXT', notnull: true, dflt_value: null, pk: false },
+      { cid: 2, name: 'password', type: 'TEXT', notnull: true, dflt_value: null, pk: false },
+      { cid: 3, name: 'name', type: 'TEXT', notnull: false, dflt_value: null, pk: false },
+      { cid: 4, name: 'createdAt', type: 'TEXT', notnull: true, dflt_value: null, pk: false },
+      { cid: 5, name: 'updatedAt', type: 'TEXT', notnull: true, dflt_value: null, pk: false }
+    ],
+    news: [
+      { cid: 0, name: 'id', type: 'INTEGER', notnull: true, dflt_value: null, pk: true },
+      { cid: 1, name: 'userId', type: 'INTEGER', notnull: false, dflt_value: null, pk: false },
+      { cid: 2, name: 'title', type: 'TEXT', notnull: true, dflt_value: null, pk: false },
+      { cid: 3, name: 'summary', type: 'TEXT', notnull: false, dflt_value: null, pk: false },
+      { cid: 4, name: 'date', type: 'TEXT', notnull: false, dflt_value: null, pk: false },
+      { cid: 5, name: 'source', type: 'TEXT', notnull: false, dflt_value: null, pk: false },
+      { cid: 6, name: 'category', type: 'TEXT', notnull: false, dflt_value: null, pk: false },
+      { cid: 7, name: 'keyword', type: 'TEXT', notnull: false, dflt_value: null, pk: false },
+      { cid: 8, name: 'url', type: 'TEXT', notnull: false, dflt_value: null, pk: false },
+      { cid: 9, name: 'collectedAt', type: 'TEXT', notnull: true, dflt_value: null, pk: false },
+      { cid: 10, name: 'publishedDate', type: 'TEXT', notnull: false, dflt_value: null, pk: false },
+      { cid: 11, name: 'importanceStars', type: 'INTEGER', notnull: false, dflt_value: null, pk: false },
+      { cid: 12, name: 'importanceValue', type: 'INTEGER', notnull: false, dflt_value: null, pk: false }
+    ],
+    radioSongs: [
+      { cid: 0, name: 'id', type: 'INTEGER', notnull: true, dflt_value: null, pk: true },
+      { cid: 1, name: 'userId', type: 'INTEGER', notnull: false, dflt_value: null, pk: false },
+      { cid: 2, name: 'title', type: 'TEXT', notnull: true, dflt_value: null, pk: false },
+      { cid: 3, name: 'artist', type: 'TEXT', notnull: false, dflt_value: null, pk: false },
+      { cid: 4, name: 'genre', type: 'TEXT', notnull: false, dflt_value: null, pk: false },
+      { cid: 5, name: 'count', type: 'INTEGER', notnull: false, dflt_value: '1', pk: false },
+      { cid: 6, name: 'lastPlayed', type: 'TEXT', notnull: false, dflt_value: null, pk: false },
+      { cid: 7, name: 'firstPlayed', type: 'TEXT', notnull: false, dflt_value: null, pk: false },
+      { cid: 8, name: 'dates', type: 'TEXT', notnull: false, dflt_value: null, pk: false },
+      { cid: 9, name: 'stations', type: 'TEXT', notnull: false, dflt_value: null, pk: false },
+      { cid: 10, name: 'collectedAt', type: 'TEXT', notnull: true, dflt_value: null, pk: false }
+    ],
+    books: [
+      { cid: 0, name: 'id', type: 'INTEGER', notnull: true, dflt_value: null, pk: true },
+      { cid: 1, name: 'userId', type: 'INTEGER', notnull: false, dflt_value: null, pk: false },
+      { cid: 2, name: 'title', type: 'TEXT', notnull: true, dflt_value: null, pk: false },
+      { cid: 3, name: 'authors', type: 'TEXT', notnull: false, dflt_value: null, pk: false },
+      { cid: 4, name: 'description', type: 'TEXT', notnull: false, dflt_value: null, pk: false },
+      { cid: 5, name: 'imageUrl', type: 'TEXT', notnull: false, dflt_value: null, pk: false },
+      { cid: 6, name: 'previewLink', type: 'TEXT', notnull: false, dflt_value: null, pk: false },
+      { cid: 7, name: 'publishedDate', type: 'TEXT', notnull: false, dflt_value: null, pk: false },
+      { cid: 8, name: 'categories', type: 'TEXT', notnull: false, dflt_value: null, pk: false },
+      { cid: 9, name: 'collectedAt', type: 'TEXT', notnull: true, dflt_value: null, pk: false }
+    ],
+    apiKeys: [
+      { cid: 0, name: 'id', type: 'INTEGER', notnull: true, dflt_value: null, pk: true },
+      { cid: 1, name: 'userId', type: 'INTEGER', notnull: true, dflt_value: null, pk: false },
+      { cid: 2, name: 'apiKey', type: 'TEXT', notnull: true, dflt_value: null, pk: false },
+      { cid: 3, name: 'name', type: 'TEXT', notnull: false, dflt_value: null, pk: false },
+      { cid: 4, name: 'description', type: 'TEXT', notnull: false, dflt_value: null, pk: false },
+      { cid: 5, name: 'isActive', type: 'INTEGER', notnull: false, dflt_value: '1', pk: false },
+      { cid: 6, name: 'lastUsedAt', type: 'TEXT', notnull: false, dflt_value: null, pk: false },
+      { cid: 7, name: 'createdAt', type: 'TEXT', notnull: true, dflt_value: null, pk: false },
+      { cid: 8, name: 'expiresAt', type: 'TEXT', notnull: false, dflt_value: null, pk: false }
+    ],
+    apiKeyUsage: [
+      { cid: 0, name: 'id', type: 'INTEGER', notnull: true, dflt_value: null, pk: true },
+      { cid: 1, name: 'apiKeyId', type: 'INTEGER', notnull: true, dflt_value: null, pk: false },
+      { cid: 2, name: 'endpoint', type: 'TEXT', notnull: true, dflt_value: null, pk: false },
+      { cid: 3, name: 'method', type: 'TEXT', notnull: true, dflt_value: null, pk: false },
+      { cid: 4, name: 'ipAddress', type: 'TEXT', notnull: false, dflt_value: null, pk: false },
+      { cid: 5, name: 'userAgent', type: 'TEXT', notnull: false, dflt_value: null, pk: false },
+      { cid: 6, name: 'statusCode', type: 'INTEGER', notnull: false, dflt_value: null, pk: false },
+      { cid: 7, name: 'createdAt', type: 'TEXT', notnull: true, dflt_value: null, pk: false }
+    ]
+  };
+  
+  return defaultSchemas[tableName] || [];
+}
+
+// 테이블 목록 조회
+export function getTables() {
+  if (!db) {
+    console.error('[DB] 데이터베이스가 초기화되지 않았습니다.');
+    return [];
+  }
+  
+  try {
+    const stmt = db.prepare("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name");
+    const tables = [];
+    
+    while (stmt.step()) {
+      const row = stmt.getAsObject();
+      tables.push(row.name);
+    }
+    
+    stmt.free();
+    return tables;
+  } catch (error) {
+    console.error('[DB] 테이블 목록 조회 오류:', error);
+    return [];
+  }
+}
+
 // 기본 내보내기
 export default {
   init,
@@ -787,5 +1009,7 @@ export default {
   radioSongsDB,
   booksDB,
   apiKeysDB,
-  apiKeyUsageDB
+  apiKeyUsageDB,
+  getSchema,
+  getTables
 };

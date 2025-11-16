@@ -34,7 +34,20 @@ export const useAuthStore = defineStore('auth', () => {
         return { success: false, error: data.error }
       }
     } catch (error) {
-      return { success: false, error: '로그인 중 오류가 발생했습니다.' }
+      console.error('[로그인] 상세 오류:', error)
+      
+      // 연결 거부 오류인 경우 명확한 메시지 표시
+      if (error.message && error.message.includes('Failed to fetch')) {
+        return { 
+          success: false, 
+          error: '서버에 연결할 수 없습니다.\n\nAPI 서버가 실행 중인지 확인하세요.\n서버 시작: npm run api-server 또는 start-dev.bat' 
+        }
+      }
+      
+      return { 
+        success: false, 
+        error: `로그인 중 오류가 발생했습니다: ${error.message || '알 수 없는 오류'}` 
+      }
     } finally {
       isLoading.value = false
     }
@@ -63,7 +76,20 @@ export const useAuthStore = defineStore('auth', () => {
         return { success: false, error: data.error }
       }
     } catch (error) {
-      return { success: false, error: '회원가입 중 오류가 발생했습니다.' }
+      console.error('[회원가입] 상세 오류:', error)
+      
+      // 연결 거부 오류인 경우 명확한 메시지 표시
+      if (error.message && error.message.includes('Failed to fetch')) {
+        return { 
+          success: false, 
+          error: '서버에 연결할 수 없습니다.\n\nAPI 서버가 실행 중인지 확인하세요.\n서버 시작: npm run api-server 또는 start-dev.bat' 
+        }
+      }
+      
+      return { 
+        success: false, 
+        error: `회원가입 중 오류가 발생했습니다: ${error.message || '알 수 없는 오류'}` 
+      }
     } finally {
       isLoading.value = false
     }

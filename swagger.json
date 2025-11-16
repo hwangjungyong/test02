@@ -2,7 +2,7 @@
   "openapi": "3.0.0",
   "info": {
     "title": "MCP API Server",
-    "description": "News API, Last.fm API, Google Books API 프록시 서버\n\n## 🔐 인증 방법 (둘 중 하나만 선택!) ⭐\n\n이 API는 **두 가지 인증 방법**을 지원합니다. **둘 다 입력할 필요 없고, 용도에 맞는 하나만 선택**해서 사용하세요!\n\n### 1️⃣ API 키 (ApiKeyAuth) - 외부에서 API 호출 시 ⭐ 추천\n\n**용도**: 외부 애플리케이션, Postman, curl, 다른 서버에서 API를 호출할 때\n\n**API 키 생성**:\n1. 웹 앱(`http://localhost:5173`)에 로그인\n2. \"사용자 관리하기\" → \"API 키 관리\" 탭\n3. \"➕ 새 API 키 생성\" 버튼 클릭\n4. 생성된 API 키를 안전한 곳에 저장 (한 번만 표시됨)\n\n**Swagger UI에서 사용**:\n- 상단 \"Authorize\" 버튼 클릭\n- **ApiKeyAuth** 필드에 생성한 API 키 입력\n- \"Authorize\" 클릭\n\n**예제**:\n```bash\ncurl -H \"X-API-Key: YOUR_API_KEY\" \\\n  http://localhost:3001/api/news?q=AI\n```\n\n### 2️⃣ JWT 토큰 (BearerAuth) - 웹 앱 개발 시\n\n**용도**: 웹 앱(`http://localhost:5173`)에서 로그인한 사용자가 API를 호출할 때\n\n**토큰 획득**:\n1. 웹 앱에서 로그인\n2. 브라우저 개발자 도구(F12) → Application → Local Storage → `authToken` 확인\n\n**Swagger UI에서 사용**:\n- 상단 \"Authorize\" 버튼 클릭\n- **BearerAuth** 필드에 JWT 토큰 입력\n- \"Authorize\" 클릭\n\n**예제**:\n```bash\ncurl -H \"Authorization: Bearer YOUR_JWT_TOKEN\" \\\n  http://localhost:3001/api/news?q=AI\n```\n\n### 💡 중요 사항\n\n- **외부에서 API를 테스트할 때**: **ApiKeyAuth만** 사용하면 됩니다! (JWT 토큰은 입력하지 않아도 됨)\n- **웹 앱 개발 시**: **BearerAuth** (JWT 토큰)를 사용합니다\n- **둘 다 입력할 필요 없습니다** - 용도에 맞는 하나만 선택하세요\n- 대부분의 API는 인증이 선택사항입니다 (인증 없이도 호출 가능)\n- 데이터 저장 API (`/api/user/*`)는 인증이 필수입니다",
+    "description": "News API, Last.fm API, Google Books API 프록시 서버\n\n## 🔐 인증 방법 (둘 중 하나만 선택!) ⭐\n\n이 API는 **두 가지 인증 방법**을 지원합니다. **둘 다 입력할 필요 없고, 용도에 맞는 하나만 선택**해서 사용하세요!\n\n### 1️⃣ API 키 (ApiKeyAuth) - 외부에서 API 호출 시 ⭐ 추천\n\n**용도**: 외부 애플리케이션, Postman, curl, 다른 서버에서 API를 호출할 때\n\n**API 키 생성**:\n1. 웹 앱(`http://localhost:5173`)에 로그인\n2. \"사용자 관리하기\" → \"API 키 관리\" 탭\n3. \"➕ 새 API 키 생성\" 버튼 클릭\n4. 생성된 API 키를 안전한 곳에 저장 (한 번만 표시됨)\n\n**Swagger UI에서 사용**:\n- 상단 \"Authorize\" 버튼 클릭\n- **ApiKeyAuth** 필드에 생성한 API 키 입력\n- \"Authorize\" 클릭\n\n**예제**:\n```bash\ncurl -H \"X-API-Key: YOUR_API_KEY\" \\\n  http://localhost:3001/api/news?q=AI\n```\n\n### 2️⃣ JWT 토큰 (BearerAuth) - 웹 앱 개발 시\n\n**용도**: 웹 앱(`http://localhost:5173`)에서 로그인한 사용자가 API를 호출할 때\n\n**토큰 획득 방법**:\n\n**방법 1: 로그인 API 사용**\n1. `POST /api/auth/login` 엔드포인트 호출\n2. 응답에서 `token` 필드 확인\n3. 이 토큰을 `Authorization: Bearer {token}` 헤더에 사용\n\n**방법 2: 웹 앱에서 로그인**\n1. 웹 앱(`http://localhost:5173`)에서 로그인\n2. 브라우저 개발자 도구(F12) → Application → Local Storage → `token` 확인\n\n**Swagger UI에서 사용**:\n- 상단 \"Authorize\" 버튼 클릭\n- **BearerAuth** 필드에 JWT 토큰 입력\n- \"Authorize\" 클릭\n\n**예제**:\n```bash\ncurl -H \"Authorization: Bearer YOUR_JWT_TOKEN\" \\\n  http://localhost:3001/api/news?q=AI\n```\n\n### 🔑 인증 API 엔드포인트\n\n**회원가입**: `POST /api/auth/signup`\n- 이메일, 비밀번호, 이름(선택)으로 새 계정 생성\n- 성공 시 JWT 토큰 자동 발급\n- 인증 불필요\n\n**로그인**: `POST /api/auth/login`\n- 이메일과 비밀번호로 로그인\n- 성공 시 JWT 토큰 발급\n- 인증 불필요\n\n**사용자 정보 조회**: `GET /api/auth/me`\n- 현재 로그인한 사용자 정보 조회\n- JWT 토큰 인증 필요 (BearerAuth)\n\n### 💡 중요 사항\n\n- **외부에서 API를 테스트할 때**: **ApiKeyAuth만** 사용하면 됩니다! (JWT 토큰은 입력하지 않아도 됨)\n- **웹 앱 개발 시**: **BearerAuth** (JWT 토큰)를 사용합니다\n- **둘 다 입력할 필요 없습니다** - 용도에 맞는 하나만 선택하세요\n- 대부분의 API는 인증이 선택사항입니다 (인증 없이도 호출 가능)\n- 데이터 저장 API (`/api/user/*`)는 인증이 필수입니다\n- **인증 API (`/api/auth/*`)는 인증 없이 호출 가능**합니다",
     "version": "1.0.0",
     "contact": {
       "email": "darkponier@naver.com"
@@ -15,6 +15,260 @@
     }
   ],
   "paths": {
+    "/api/auth/signup": {
+      "post": {
+        "summary": "회원가입",
+        "description": "새로운 사용자를 등록합니다. 회원가입 성공 시 JWT 토큰이 자동으로 발급됩니다.",
+        "operationId": "signup",
+        "tags": ["Authentication"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["email", "password"],
+                "properties": {
+                  "email": {
+                    "type": "string",
+                    "format": "email",
+                    "description": "이메일 주소",
+                    "example": "user@example.com"
+                  },
+                  "password": {
+                    "type": "string",
+                    "minLength": 6,
+                    "description": "비밀번호 (최소 6자)",
+                    "example": "password123"
+                  },
+                  "name": {
+                    "type": "string",
+                    "description": "이름 (선택사항, 미입력 시 이메일 앞부분 사용)",
+                    "example": "홍길동"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "회원가입 성공",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "회원가입이 완료되었습니다."
+                    },
+                    "user": {
+                      "$ref": "#/components/schemas/User"
+                    },
+                    "token": {
+                      "type": "string",
+                      "description": "JWT 토큰",
+                      "example": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "잘못된 요청",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "이미 사용 중인 이메일",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "서버 오류",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/login": {
+      "post": {
+        "summary": "로그인",
+        "description": "이메일과 비밀번호로 로그인합니다. 로그인 성공 시 JWT 토큰이 발급됩니다.",
+        "operationId": "login",
+        "tags": ["Authentication"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["email", "password"],
+                "properties": {
+                  "email": {
+                    "type": "string",
+                    "format": "email",
+                    "description": "이메일 주소",
+                    "example": "user@example.com"
+                  },
+                  "password": {
+                    "type": "string",
+                    "description": "비밀번호",
+                    "example": "password123"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "로그인 성공",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "로그인 성공"
+                    },
+                    "user": {
+                      "$ref": "#/components/schemas/User"
+                    },
+                    "token": {
+                      "type": "string",
+                      "description": "JWT 토큰",
+                      "example": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "잘못된 요청",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "인증 실패 (이메일 또는 비밀번호가 올바르지 않음)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "서버 오류",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/me": {
+      "get": {
+        "summary": "사용자 정보 조회",
+        "description": "현재 로그인한 사용자의 정보를 조회합니다. JWT 토큰 인증이 필요합니다.",
+        "operationId": "getCurrentUser",
+        "tags": ["Authentication"],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "성공",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "user": {
+                      "$ref": "#/components/schemas/User"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "인증 실패",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "사용자를 찾을 수 없음",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "서버 오류",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/news": {
       "get": {
         "summary": "AI 뉴스 검색",
@@ -1078,6 +1332,53 @@
             "type": "integer",
             "description": "HTTP 상태 코드",
             "example": 400
+          }
+        }
+      },
+      "User": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "description": "사용자 ID",
+            "example": 1
+          },
+          "email": {
+            "type": "string",
+            "format": "email",
+            "description": "이메일 주소",
+            "example": "user@example.com"
+          },
+          "name": {
+            "type": "string",
+            "description": "이름",
+            "example": "홍길동"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "가입일시",
+            "example": "2025-01-09T10:30:00Z"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "수정일시",
+            "example": "2025-01-09T10:30:00Z"
+          }
+        }
+      },
+      "AuthError": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "example": false
+          },
+          "error": {
+            "type": "string",
+            "description": "오류 메시지",
+            "example": "이메일 또는 비밀번호가 올바르지 않습니다."
           }
         }
       },

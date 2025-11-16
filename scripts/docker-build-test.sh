@@ -15,11 +15,15 @@ if ! command -v docker &> /dev/null; then
     exit 1
 fi
 
-# Docker Compose 확인
-if command -v docker-compose &> /dev/null; then
+# Docker Compose 확인 (v2 우선)
+if docker compose version &> /dev/null; then
+    DOCKER_COMPOSE_CMD="docker compose"
+elif command -v docker-compose &> /dev/null; then
     DOCKER_COMPOSE_CMD="docker-compose"
 else
-    DOCKER_COMPOSE_CMD="docker compose"
+    echo "Error: Docker Compose is not installed"
+    echo "Please install Docker Desktop or Docker Compose: https://docs.docker.com/compose/install/"
+    exit 1
 fi
 
 echo "[1/4] Building Docker images..."

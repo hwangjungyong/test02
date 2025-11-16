@@ -15,9 +15,14 @@ if ! command -v docker &> /dev/null; then
     exit 1
 fi
 
-if ! command -v docker-compose &> /dev/null; then
+# Docker Compose 명령어 확인 (v2 우선)
+if docker compose version &> /dev/null; then
+    DOCKER_COMPOSE_CMD="docker compose"
+elif command -v docker-compose &> /dev/null; then
+    DOCKER_COMPOSE_CMD="docker-compose"
+else
     echo "Error: Docker Compose is not installed"
-    echo "Please install Docker Compose: https://docs.docker.com/compose/install/"
+    echo "Please install Docker Desktop or Docker Compose: https://docs.docker.com/compose/install/"
     exit 1
 fi
 
@@ -29,14 +34,14 @@ echo ""
 
 if [ "$BUILD_MODE" = "dev" ]; then
     echo "Building development images..."
-    docker-compose -f docker-compose.dev.yml build
+    $DOCKER_COMPOSE_CMD -f docker-compose.dev.yml build
     echo ""
-    echo "Build complete! Run with: docker-compose -f docker-compose.dev.yml up"
+    echo "Build complete! Run with: $DOCKER_COMPOSE_CMD -f docker-compose.dev.yml up"
 else
     echo "Building production images..."
-    docker-compose build
+    $DOCKER_COMPOSE_CMD build
     echo ""
-    echo "Build complete! Run with: docker-compose up -d"
+    echo "Build complete! Run with: $DOCKER_COMPOSE_CMD up -d"
 fi
 
 echo ""

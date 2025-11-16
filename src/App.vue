@@ -71,6 +71,13 @@
               API 키 관리
             </button>
             <button 
+              @click="userManagementTab = 'db-schema'" 
+              class="tab-btn" 
+              :class="{ active: userManagementTab === 'db-schema' }"
+            >
+              📊 DB 스키마
+            </button>
+            <button 
               @click="userManagementTab = 'delete'" 
               class="tab-btn" 
               :class="{ active: userManagementTab === 'delete' }"
@@ -400,6 +407,71 @@
                     </button>
                   </div>
                 </form>
+              </div>
+            </div>
+          </div>
+
+          <!-- DB 스키마 탭 -->
+          <div v-if="userManagementTab === 'db-schema'" class="tab-content">
+            <div v-if="dbSchemaLoading" class="loading">
+              <p>데이터베이스 스키마를 불러오는 중...</p>
+            </div>
+            <div v-else>
+              <div class="schema-header">
+                <h3>📊 데이터베이스 스키마</h3>
+                <p class="schema-description">현재 데이터베이스에 구성된 테이블과 컬럼 정보입니다.</p>
+              </div>
+              
+              <div v-if="dbSchemaError" class="error-message" style="white-space: pre-line;">
+                {{ dbSchemaError }}
+                <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #ffcdd2;">
+                  <strong>디버깅 정보:</strong>
+                  <ul style="margin: 8px 0; padding-left: 20px;">
+                    <li>API 엔드포인트: http://localhost:3001/api/db/schema</li>
+                    <li>서버 상태 확인: 브라우저 개발자 도구(F12) → Network 탭에서 요청 확인</li>
+                    <li>서버 콘솔 확인: API 서버 실행 창에서 에러 로그 확인</li>
+                  </ul>
+                </div>
+              </div>
+              
+              <div v-if="dbSchema && dbSchema.tables" class="schema-tables">
+                <div class="schema-summary">
+                  <p><strong>총 {{ dbSchema.tables.length }}개의 테이블</strong></p>
+                </div>
+                
+                <div v-for="tableName in dbSchema.tables" :key="tableName" class="schema-table">
+                  <div class="table-header">
+                    <h4>📋 {{ tableName }}</h4>
+                    <span class="table-column-count">{{ dbSchema.schema[tableName]?.length || 0 }}개 컬럼</span>
+                  </div>
+                  
+                  <div class="table-schema">
+                    <table class="schema-columns-table">
+                      <thead>
+                        <tr>
+                          <th>컬럼명</th>
+                          <th>타입</th>
+                          <th>NULL 허용</th>
+                          <th>기본값</th>
+                          <th>Primary Key</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr v-for="column in dbSchema.schema[tableName]" :key="column.cid">
+                          <td><strong>{{ column.name }}</strong></td>
+                          <td><code>{{ column.type }}</code></td>
+                          <td>{{ column.notnull ? '❌' : '✅' }}</td>
+                          <td>{{ column.dflt_value || '-' }}</td>
+                          <td>{{ column.pk ? '🔑' : '-' }}</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+              
+              <div v-else class="no-schema">
+                <p>스키마 정보를 불러올 수 없습니다.</p>
               </div>
             </div>
           </div>
@@ -1654,6 +1726,9 @@ const userData = ref({ news: [], radioSongs: [], books: [] })
 const userDataSummary = ref({ newsCount: 0, radioSongsCount: 0, booksCount: 0 })
 const apiKeys = ref([])
 const apiKeysLoading = ref(false)
+const dbSchema = ref(null)
+const dbSchemaLoading = ref(false)
+const dbSchemaError = ref('')
 const showCreateApiKeyModal = ref(false)
 const isCreatingApiKey = ref(false)
 const createdApiKey = ref(null)
@@ -1826,12 +1901,64 @@ async function loadUserDataSummary() {
   }
 }
 
+// 데이터베이스 스키마 로드
+async function loadDbSchema() {
+  dbSchemaLoading.value = true
+  dbSchemaError.value = ''
+  
+  try {
+    const response = await fetch('http://localhost:3001/api/db/schema')
+    
+    if (!response.ok) {
+      const errorText = await response.text()
+      let errorData
+      try {
+        errorData = JSON.parse(errorText)
+      } catch {
+        errorData = { error: errorText || `HTTP ${response.status} ${response.statusText}` }
+      }
+      throw new Error(errorData.error || `HTTP ${response.status}: ${response.statusText}`)
+    }
+    
+    const data = await response.json()
+    
+    if (data.success) {
+      dbSchema.value = data
+      dbSchemaError.value = ''
+    } else {
+      dbSchemaError.value = data.error || '스키마를 불러올 수 없습니다.'
+      console.error('[스키마 조회] API 응답 오류:', data)
+    }
+  } catch (error) {
+    console.error('[스키마 로드] 상세 오류:', error)
+    console.error('[스키마 로드] 오류 스택:', error.stack)
+    
+    // 상세한 에러 메시지 표시
+    let errorMessage = '스키마를 불러오는 중 오류가 발생했습니다.'
+    
+    if (error.message) {
+      errorMessage += `\n\n오류 내용: ${error.message}`
+    }
+    
+    if (error.name === 'TypeError' && error.message.includes('fetch')) {
+      errorMessage += '\n\n서버에 연결할 수 없습니다. API 서버가 실행 중인지 확인하세요.'
+      errorMessage += '\n확인 방법: http://localhost:3001/api/db/schema'
+    }
+    
+    dbSchemaError.value = errorMessage
+  } finally {
+    dbSchemaLoading.value = false
+  }
+}
+
 // 사용자 데이터 로드 (탭 변경 시)
 watch(userManagementTab, async (newTab) => {
   if (newTab === 'data') {
     await loadUserDataSummary()
   } else if (newTab === 'api-keys') {
     await loadApiKeys()
+  } else if (newTab === 'db-schema') {
+    await loadDbSchema()
   }
 })
 
@@ -9400,6 +9527,115 @@ onMounted(() => {
 
 .btn-secondary:hover {
   background: #5a6268;
+}
+
+/* DB 스키마 스타일 */
+.schema-header {
+  margin-bottom: 24px;
+}
+
+.schema-header h3 {
+  margin-bottom: 8px;
+  color: #333;
+  font-size: 20px;
+}
+
+.schema-description {
+  color: #666;
+  font-size: 14px;
+  margin: 0;
+}
+
+.schema-summary {
+  margin-bottom: 24px;
+  padding: 12px;
+  background: #f0f4ff;
+  border-radius: 8px;
+  border-left: 4px solid #667eea;
+}
+
+.schema-summary p {
+  margin: 0;
+  color: #333;
+}
+
+.schema-tables {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.schema-table {
+  background: #fff;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.table-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+}
+
+.table-header h4 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.table-column-count {
+  font-size: 14px;
+  opacity: 0.9;
+}
+
+.table-schema {
+  overflow-x: auto;
+}
+
+.schema-columns-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.schema-columns-table thead {
+  background: #f5f5f5;
+}
+
+.schema-columns-table th {
+  padding: 12px;
+  text-align: left;
+  font-weight: 600;
+  color: #333;
+  border-bottom: 2px solid #e0e0e0;
+  font-size: 14px;
+}
+
+.schema-columns-table td {
+  padding: 12px;
+  border-bottom: 1px solid #f0f0f0;
+  font-size: 14px;
+}
+
+.schema-columns-table tbody tr:hover {
+  background: #f9f9f9;
+}
+
+.schema-columns-table code {
+  background: #f0f0f0;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-family: 'Courier New', monospace;
+  font-size: 13px;
+  color: #d63384;
+}
+
+.no-schema {
+  text-align: center;
+  padding: 40px;
+  color: #666;
 }
 </style>
 

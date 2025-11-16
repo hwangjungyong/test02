@@ -21,14 +21,20 @@ if errorlevel 1 (
     exit /b 1
 )
 
-REM Check if Docker Compose is installed
-where docker-compose >nul 2>&1
+REM Check Docker Compose (v2 우선)
+docker compose version >nul 2>&1
 if errorlevel 1 (
-    echo Warning: docker-compose command not found
-    echo Trying docker compose instead...
-    set DOCKER_COMPOSE_CMD=docker compose
+    where docker-compose >nul 2>&1
+    if errorlevel 1 (
+        echo Error: Docker Compose is not installed
+        echo Please install Docker Desktop: https://www.docker.com/products/docker-desktop
+        pause
+        exit /b 1
+    ) else (
+        set DOCKER_COMPOSE_CMD=docker-compose
+    )
 ) else (
-    set DOCKER_COMPOSE_CMD=docker-compose
+    set DOCKER_COMPOSE_CMD=docker compose
 )
 
 REM Build mode selection

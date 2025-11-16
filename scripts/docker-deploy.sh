@@ -21,17 +21,28 @@ if ! command -v docker &> /dev/null; then
     exit 1
 fi
 
+# Docker Compose 명령어 확인 (v2 우선)
+if docker compose version &> /dev/null; then
+    DOCKER_COMPOSE_CMD="docker compose"
+elif command -v docker-compose &> /dev/null; then
+    DOCKER_COMPOSE_CMD="docker-compose"
+else
+    echo "Error: Docker Compose is not installed"
+    echo "Please install Docker Desktop or Docker Compose: https://docs.docker.com/compose/install/"
+    exit 1
+fi
+
 # 빌드
 echo "[1/3] Building Docker images..."
-docker-compose build
+$DOCKER_COMPOSE_CMD build
 
 # 중지 (이미 실행 중인 경우)
 echo "[2/3] Stopping existing containers..."
-docker-compose down
+$DOCKER_COMPOSE_CMD down
 
 # 시작
 echo "[3/3] Starting containers..."
-docker-compose up -d
+$DOCKER_COMPOSE_CMD up -d
 
 # 상태 확인
 echo ""
@@ -40,13 +51,13 @@ echo "Deployment completed!"
 echo "=========================================="
 echo ""
 echo "Container status:"
-docker-compose ps
+$DOCKER_COMPOSE_CMD ps
 echo ""
 echo "Services:"
 echo "  - Frontend: http://localhost:5173"
 echo "  - Backend API: http://localhost:3001"
 echo "  - Python HTTP: http://localhost:3002"
 echo ""
-echo "View logs: docker-compose logs -f"
-echo "Stop services: docker-compose down"
+echo "View logs: $DOCKER_COMPOSE_CMD logs -f"
+echo "Stop services: $DOCKER_COMPOSE_CMD down"
 

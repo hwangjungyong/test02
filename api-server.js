@@ -35,7 +35,7 @@ import { dirname, join } from 'path';
 import dotenv from 'dotenv';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
-import { userDB, newsDB, radioSongsDB, booksDB, apiKeysDB, apiKeyUsageDB, init } from './database.js';
+import { userDB, newsDB, radioSongsDB, booksDB, apiKeysDB, apiKeyUsageDB, init, getSchema, getTables } from './database.js';
 
 // 환경 변수 로드
 dotenv.config();
@@ -1947,6 +1947,38 @@ const server = http.createServer(async (req, res) => {
       res.end(JSON.stringify({ error: error.message }));
     }
   }
+
+  // ============================================
+  // 데이터베이스 스키마 조회 API
+  // ============================================
+  
+  // 데이터베이스 스키마 조회: GET /api/db/schema
+  else if (req.url === '/api/db/schema' && req.method === 'GET') {
+    try {
+      // 데이터베이스가 초기화되었는지 확인
+      const schema = getSchema();
+      const tables = getTables();
+      
+      // 빈 결과 체크
+      if (!schema || Object.keys(schema).length === 0) {
+        console.warn('[API 서버] 스키마가 비어있습니다.');
+      }
+      
+      return sendJSON(res, 200, {
+        success: true,
+        tables: tables || [],
+        schema: schema || {}
+      });
+    } catch (error) {
+      console.error('[API 서버] 데이터베이스 스키마 조회 오류:', error);
+      console.error('[API 서버] 오류 상세:', error.stack);
+      return sendJSON(res, 500, {
+        success: false,
+        error: `데이터베이스 스키마 조회 중 오류가 발생했습니다: ${error.message}`
+      });
+    }
+  }
+
   // ============================================
   // Swagger UI
   // ============================================
