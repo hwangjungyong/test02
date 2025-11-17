@@ -36,6 +36,10 @@ import dotenv from 'dotenv';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import { userDB, newsDB, radioSongsDB, booksDB, apiKeysDB, apiKeyUsageDB, init, getSchema, getTables } from './database.js';
+import { exec } from 'child_process';
+import { promisify } from 'util';
+
+const execAsync = promisify(exec);
 
 // 환경 변수 로드
 dotenv.config();
@@ -1980,6 +1984,86 @@ const server = http.createServer(async (req, res) => {
   }
 
   // ============================================
+  // Docker 상태 조회 API
+  // ============================================
+  
+  // Docker 상태 조회: GET /api/docker/status
+  else if ((req.url === '/api/docker/status' || req.url.split('?')[0] === '/api/docker/status') && req.method === 'GET') {
+    try {
+      console.log('[API 서버] Docker 상태 조회 요청:', req.url);
+      const dockerStatus = {
+        installed: false,
+        running: false,
+        version: null,
+        containers: []
+      };
+
+      // Docker 설치 확인
+      try {
+        const { stdout: versionOutput } = await execAsync('docker --version');
+        dockerStatus.installed = true;
+        dockerStatus.version = versionOutput.trim().replace('Docker version ', '').split(',')[0];
+      } catch (error) {
+        return sendJSON(res, 200, {
+          success: true,
+          docker: dockerStatus,
+          message: 'Docker가 설치되어 있지 않습니다.'
+        });
+      }
+
+      // Docker Compose 설치 확인
+      let dockerComposeCmd = 'docker compose';
+      try {
+        await execAsync('docker compose version');
+      } catch {
+        try {
+          await execAsync('docker-compose --version');
+          dockerComposeCmd = 'docker-compose';
+        } catch {
+          dockerStatus.running = false;
+          return sendJSON(res, 200, {
+            success: true,
+            docker: dockerStatus,
+            message: 'Docker Compose가 설치되어 있지 않습니다.'
+          });
+        }
+      }
+
+      // 실행 중인 컨테이너 확인
+      try {
+        const { stdout: psOutput } = await execAsync('docker ps --format "{{.Names}}|{{.Status}}|{{.Image}}|{{.Ports}}"');
+        const containers = psOutput.trim().split('\n').filter(line => line.includes('test02-')).map(line => {
+          const [name, status, image, ports] = line.split('|');
+          return {
+            name: name.trim(),
+            status: status.trim(),
+            image: image.trim(),
+            ports: ports.trim() || 'N/A',
+            running: status.includes('Up')
+          };
+        });
+
+        dockerStatus.containers = containers;
+        dockerStatus.running = containers.length > 0;
+      } catch (error) {
+        console.error('[API 서버] Docker 컨테이너 조회 오류:', error);
+        dockerStatus.running = false;
+      }
+
+      return sendJSON(res, 200, {
+        success: true,
+        docker: dockerStatus
+      });
+    } catch (error) {
+      console.error('[API 서버] Docker 상태 조회 오류:', error);
+      return sendJSON(res, 500, {
+        success: false,
+        error: `Docker 상태 조회 중 오류가 발생했습니다: ${error.message}`
+      });
+    }
+  }
+
+  // ============================================
   // Swagger UI
   // ============================================
   // 엔드포인트: GET /api-docs
@@ -2122,8 +2206,9 @@ const server = http.createServer(async (req, res) => {
     });
   } else {
     // 알 수 없는 경로에 대한 404 응답
+    console.log('[API 서버] 404 Not Found:', req.method, req.url);
     res.writeHead(404, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ error: 'Not Found' }));
+    res.end(JSON.stringify({ error: 'Not Found', path: req.url }));
   }
 });
 

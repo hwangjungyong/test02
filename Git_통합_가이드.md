@@ -117,7 +117,7 @@ git config --list --global
 
 ### 인터넷상에서 Git 계정 확인
 
-#### GitHub에서 확인
+#### GitHub에서 확인 
 
 **주요 링크:**
 - **프로필 페이지**: https://github.com/settings/profile
@@ -290,6 +290,51 @@ git restore --staged 파일명
 # 파일 변경사항 취소
 git restore 파일명
 ```
+
+### 문제 5: git push 출력 메시지 이해하기
+
+**`git push origin main` 실행 시 나타나는 메시지:**
+
+```bash
+C:\test\test02>git push origin main
+# 명령어: 원격 저장소(origin)의 main 브랜치에 푸시
+
+git: 'credential-manager-core' is not a git command. See 'git --help'.
+# 경고: credential-manager-core가 git 명령어가 아님 (무시해도 됨, 인증은 정상 작동)
+
+Enumerating objects: 5, done.
+# 객체 열거 중: 5개 발견 완료
+
+Counting objects: 100% (5/5), done.
+# 객체 개수 세는 중: 100% (5개 중 5개) 완료
+
+Delta compression using up to 8 threads
+# 델타 압축 중: 최대 8개 스레드 사용
+
+Compressing objects: 100% (3/3), done.
+# 객체 압축 중: 100% (3개 중 3개) 완료
+
+Writing objects: 100% (3/3), 298 bytes | 298.00 KiB/s, done.
+# 객체 쓰는 중: 100% (3개 중 3개), 298 바이트 전송 완료
+
+Total 3 (delta 2), reused 0 (delta 0), pack-reused 0 (from 0)
+# 총 3개 객체 (델타 2개), 재사용 0개, 팩 재사용 0개
+
+remote: Resolving deltas: 100% (2/2), completed with 2 local objects.
+# 원격: 델타 해결 중: 100% (2개 중 2개), 로컬 객체 2개로 완료
+
+To https://github.com/hwangjungyong/test02.git
+# 대상: https://github.com/hwangjungyong/test02.git
+
+   a097031..312f917  main -> main
+# 커밋 범위: a097031에서 312f917로, main 브랜치에 푸시 완료
+```
+
+**요약:**
+- ✅ **성공적으로 푸시됨**: 모든 객체가 원격 저장소에 업로드됨
+- ⚠️ **경고 무시 가능**: `credential-manager-core` 경고는 인증에 영향을 주지 않음
+- 📊 **통계**: 3개 객체, 298 바이트 전송
+- 🔄 **커밋 범위**: `a097031` → `312f917` (새 커밋이 추가됨)
 
 ---
 

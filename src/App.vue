@@ -78,6 +78,13 @@
               📊 DB 스키마
             </button>
             <button 
+              @click="userManagementTab = 'docker'" 
+              class="tab-btn" 
+              :class="{ active: userManagementTab === 'docker' }"
+            >
+              🐳 Docker 상태
+            </button>
+            <button 
               @click="userManagementTab = 'delete'" 
               class="tab-btn" 
               :class="{ active: userManagementTab === 'delete' }"
@@ -472,6 +479,112 @@
               
               <div v-else class="no-schema">
                 <p>스키마 정보를 불러올 수 없습니다.</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Docker 상태 탭 -->
+          <div v-if="userManagementTab === 'docker'" class="tab-content">
+            <h3>🐳 Docker 컨테이너 상태</h3>
+            <p style="margin-bottom: 20px; color: #666;">
+              현재 실행 중인 Docker 컨테이너의 상태를 확인할 수 있습니다.
+            </p>
+
+            <div v-if="dockerStatusLoading" class="loading">
+              <p>Docker 상태를 불러오는 중...</p>
+            </div>
+
+            <div v-else-if="dockerStatusError" class="error-message" style="white-space: pre-line;">
+              {{ dockerStatusError }}
+            </div>
+
+            <div v-else-if="dockerStatus">
+              <!-- Docker 설치 상태 -->
+              <div class="docker-info-section" style="margin-bottom: 24px; padding: 16px; background: #f5f5f5; border-radius: 8px;">
+                <h4 style="margin-top: 0;">Docker 정보</h4>
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px;">
+                  <div>
+                    <strong>설치 여부:</strong>
+                    <span :style="{ color: dockerStatus.docker?.installed ? '#4caf50' : '#f44336' }">
+                      {{ dockerStatus.docker?.installed ? '✅ 설치됨' : '❌ 미설치' }}
+                    </span>
+                  </div>
+                  <div v-if="dockerStatus.docker?.installed">
+                    <strong>버전:</strong> {{ dockerStatus.docker?.version || 'N/A' }}
+                  </div>
+                  <div>
+                    <strong>실행 상태:</strong>
+                    <span :style="{ color: dockerStatus.docker?.running ? '#4caf50' : '#f44336' }">
+                      {{ dockerStatus.docker?.running ? '✅ 실행 중' : '⏸️ 중지됨' }}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 컨테이너 목록 -->
+              <div v-if="dockerStatus.docker?.containers && dockerStatus.docker.containers.length > 0">
+                <h4>실행 중인 컨테이너 ({{ dockerStatus.docker.containers.length }}개)</h4>
+                <div class="docker-containers-list" style="margin-top: 16px;">
+                  <div 
+                    v-for="container in dockerStatus.docker.containers" 
+                    :key="container.name"
+                    class="docker-container-card"
+                    style="padding: 16px; margin-bottom: 12px; border: 1px solid #ddd; border-radius: 8px; background: white;"
+                  >
+                    <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 12px;">
+                      <div>
+                        <h5 style="margin: 0 0 8px 0; color: #333;">
+                          {{ container.name }}
+                        </h5>
+                        <div style="font-size: 12px; color: #666;">
+                          <div><strong>이미지:</strong> {{ container.image }}</div>
+                          <div style="margin-top: 4px;">
+                            <strong>포트:</strong> {{ container.ports }}
+                          </div>
+                        </div>
+                      </div>
+                      <div>
+                        <span 
+                          :style="{ 
+                            padding: '4px 12px', 
+                            borderRadius: '12px', 
+                            fontSize: '12px',
+                            fontWeight: 'bold',
+                            color: container.running ? '#4caf50' : '#f44336',
+                            background: container.running ? '#e8f5e9' : '#ffebee'
+                          }"
+                        >
+                          {{ container.running ? '실행 중' : '중지됨' }}
+                        </span>
+                      </div>
+                    </div>
+                    <div style="font-size: 12px; color: #888;">
+                      {{ container.status }}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div v-else-if="dockerStatus.docker?.installed" class="no-containers" style="padding: 24px; text-align: center; color: #666;">
+                <p>실행 중인 컨테이너가 없습니다.</p>
+                <p style="font-size: 12px; margin-top: 8px;">
+                  컨테이너를 시작하려면: <code>docker-compose up -d</code>
+                </p>
+              </div>
+
+              <div v-if="dockerStatus.message" style="margin-top: 16px; padding: 12px; background: #fff3cd; border-left: 4px solid #ffc107; border-radius: 4px;">
+                <strong>알림:</strong> {{ dockerStatus.message }}
+              </div>
+            </div>
+
+            <div style="margin-top: 24px; padding-top: 24px; border-top: 1px solid #ddd;">
+              <h4>Docker 명령어 가이드</h4>
+              <div style="background: #f5f5f5; padding: 16px; border-radius: 8px; font-family: monospace; font-size: 12px;">
+                <div style="margin-bottom: 8px;"><strong>컨테이너 시작:</strong> docker-compose up -d</div>
+                <div style="margin-bottom: 8px;"><strong>컨테이너 중지:</strong> docker-compose down</div>
+                <div style="margin-bottom: 8px;"><strong>컨테이너 재시작:</strong> docker-compose restart</div>
+                <div style="margin-bottom: 8px;"><strong>로그 확인:</strong> docker logs test02-frontend</div>
+                <div><strong>상태 확인:</strong> docker ps</div>
               </div>
             </div>
           </div>
@@ -1729,6 +1842,9 @@ const apiKeysLoading = ref(false)
 const dbSchema = ref(null)
 const dbSchemaLoading = ref(false)
 const dbSchemaError = ref('')
+const dockerStatus = ref(null)
+const dockerStatusLoading = ref(false)
+const dockerStatusError = ref('')
 const showCreateApiKeyModal = ref(false)
 const isCreatingApiKey = ref(false)
 const createdApiKey = ref(null)
@@ -1951,6 +2067,54 @@ async function loadDbSchema() {
   }
 }
 
+// Docker 상태 로드
+async function loadDockerStatus() {
+  dockerStatusLoading.value = true
+  dockerStatusError.value = ''
+  
+  try {
+    const response = await fetch('http://localhost:3001/api/docker/status')
+    
+    if (!response.ok) {
+      const errorText = await response.text()
+      let errorData
+      try {
+        errorData = JSON.parse(errorText)
+      } catch {
+        errorData = { error: errorText || `HTTP ${response.status} ${response.statusText}` }
+      }
+      throw new Error(errorData.error || `HTTP ${response.status}: ${response.statusText}`)
+    }
+    
+    const data = await response.json()
+    
+    if (data.success) {
+      dockerStatus.value = data
+      dockerStatusError.value = ''
+    } else {
+      dockerStatusError.value = data.error || 'Docker 상태를 불러올 수 없습니다.'
+      console.error('[Docker 상태 조회] API 응답 오류:', data)
+    }
+  } catch (error) {
+    console.error('[Docker 상태 로드] 상세 오류:', error)
+    
+    let errorMessage = 'Docker 상태를 불러오는 중 오류가 발생했습니다.'
+    
+    if (error.message) {
+      errorMessage += `\n\n오류 내용: ${error.message}`
+    }
+    
+    if (error.name === 'TypeError' && error.message.includes('fetch')) {
+      errorMessage += '\n\n서버에 연결할 수 없습니다. API 서버가 실행 중인지 확인하세요.'
+      errorMessage += '\n확인 방법: http://localhost:3001/api/docker/status'
+    }
+    
+    dockerStatusError.value = errorMessage
+  } finally {
+    dockerStatusLoading.value = false
+  }
+}
+
 // 사용자 데이터 로드 (탭 변경 시)
 watch(userManagementTab, async (newTab) => {
   if (newTab === 'data') {
@@ -1959,6 +2123,8 @@ watch(userManagementTab, async (newTab) => {
     await loadApiKeys()
   } else if (newTab === 'db-schema') {
     await loadDbSchema()
+  } else if (newTab === 'docker') {
+    await loadDockerStatus()
   }
 })
 
