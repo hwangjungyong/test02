@@ -1,0 +1,99 @@
+워크스페이스: C:\test\test02
+========================================================================================================================
+
+발견된 SQL 파일: 1개
+  - C:\test\test02\temp_query_1763601048939.sql
+
+========================================================================================================================
+[SQL 파일] C:\test\test02\temp_query_1763601048939.sql
+========================================================================================================================
+
+[분석 시작]
+
+## 쿼리 분석 결과
+
+### 1. 기본 정보
+- 쿼리 타입: UNKNOWN
+- 쿼리 길이: 16201 문자, 467 라인
+- 테이블 수: 0개
+- 컬럼 수: 0개
+- JOIN 수: 9개
+- 서브쿼리 수: 0개
+- 최대 서브쿼리 깊이: 0
+
+### 2. 성능 분석
+- 성능 점수: 28/100
+- 성능 레벨: HIGH
+- 성능 이슈 수: 9개
+
+#### 성능 이슈:
+1. [MEDIUM] FUNCTION_IN_WHERE
+   - WHERE 절에서 함수 사용: u . createdAt >= date ( 'now' , '-1 year' ) GROUP ...
+   - 영향: 인덱스 사용 불가능
+
+2. [MEDIUM] FUNCTION_IN_WHERE
+   - WHERE 절에서 함수 사용: n2 . category = cns . category AND n2 . publishedD...
+   - 영향: 인덱스 사용 불가능
+
+3. [MEDIUM] FUNCTION_IN_WHERE
+   - WHERE 절에서 함수 사용: rs2 . artist = ars . artist AND rs2 . lastPlayed >...
+   - 영향: 인덱스 사용 불가능
+
+4. [MEDIUM] FUNCTION_IN_WHERE
+   - WHERE 절에서 함수 사용: n2 . category = n . category AND n2 . publishedDat...
+   - 영향: 인덱스 사용 불가능
+
+5. [MEDIUM] FUNCTION_IN_WHERE
+   - WHERE 절에서 함수 사용: rs2 . artist = rs . artist AND rs2 . lastPlayed >=...
+   - 영향: 인덱스 사용 불가능
+
+### 3. 복잡도 분석
+- 복잡도 점수: 10/100
+- 복잡도 레벨: LOW
+
+#### 복잡도 지표:
+- 쿼리 길이: 16201 문자, 467 라인
+- 테이블 수: 0개
+- JOIN 수: 9개
+- 서브쿼리 수: 0개
+- 최대 서브쿼리 깊이: 0
+- WHERE 조건 수: 7개
+- UNION 수: 0개
+
+### 4. 보안 분석
+- 보안 점수: 100/100
+- 보안 레벨: SAFE
+- 보안 취약점 수: 0개
+
+보안 취약점이 발견되지 않았습니다.
+
+### 5. 최적화 제안
+- 총 제안 수: 6개
+  - HIGH 우선순위: 2개
+  - MEDIUM 우선순위: 2개
+  - LOW 우선순위: 2개
+
+#### HIGH 우선순위 제안:
+1. [INDEX] WHERE 절 컬럼에 인덱스 추가 고려: createdAt, collectedAt, category, publishedDate, artist
+   예시: CREATE INDEX idx_name ON table_name (createdAt, collectedAt, category);
+   예상 개선율: 30-50%
+
+2. [INDEX] JOIN 조건 컬럼에 인덱스 추가 고려: id, user_id
+   예시: CREATE INDEX idx_join ON table_name (id, user_id);
+   예상 개선율: 40-60%
+
+#### MEDIUM 우선순위 제안:
+1. [QUERY_REFACTOR] DISTINCT 사용(26회) 최소화 고려
+   예시: GROUP BY를 사용하여 DISTINCT 대체 가능 여부 검토
+   예상 개선율: 15-30%
+
+2. [JOIN_OPTIMIZATION] 다중 JOIN(9개) 순서 최적화 고려: 작은 테이블을 먼저 JOIN
+   예시: 작은 테이블을 FROM 절에 배치하고 큰 테이블을 나중에 JOIN
+   예상 개선율: 10-25%
+
+[JSON 리포트 저장] C:\test\test02\logs\sql_analysis\temp_query_1763601048939_analysis_20251120_101051.json
+[마크다운 리포트 저장] C:\test\test02\logs\sql_analysis\temp_query_1763601048939_analysis_20251120_101051.md
+[리니지 마크다운 리포트 저장] C:\test\test02\logs\sql_analysis\temp_query_1763601048939_lineage_20251120_101051.md
+[리니지 JSON 리포트 저장] C:\test\test02\logs\sql_analysis\temp_query_1763601048939_lineage_20251120_101051.json
+
+

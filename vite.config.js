@@ -26,6 +26,11 @@ export default defineConfig({
   
   // 개발 서버 설정
   server: {
+    // 포트 명시적 설정 (항상 5173 사용)
+    port: 5173,
+    strictPort: true, // 포트가 사용 중이면 에러 발생 (자동 변경 방지)
+    host: true, // 네트워크에서 접근 가능하도록 설정
+    
     // 프록시 설정
     // - Vue 앱에서 /api/* 경로로 요청하면 백엔드 API 서버로 프록시
     proxy: {

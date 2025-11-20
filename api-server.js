@@ -29,7 +29,7 @@ import http from 'http';
 import https from 'https';
 import { URL } from 'url';
 import { HttpsProxyAgent } from 'https-proxy-agent';
-import { readFileSync } from 'fs';
+import { readFileSync, readdirSync, statSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import dotenv from 'dotenv';
@@ -1576,6 +1576,7 @@ const server = http.createServer(async (req, res) => {
       const twoWeeksAgo = new Date(today);
       twoWeeksAgo.setDate(today.getDate() - 14);
       const fromDate = twoWeeksAgo.toISOString().split('T')[0]; // YYYY-MM-DD 형식
+      const toDate = today.toISOString().split('T')[0]; // YYYY-MM-DD 형식
 
       // 경제 관련 키워드 추가 (검색 쿼리 단순화)
       // OR 연산자가 News API에서 제대로 작동하지 않을 수 있으므로 단순화
@@ -1584,12 +1585,12 @@ const server = http.createServer(async (req, res) => {
       const searchQuery = `${q} (${economyKeywords.slice(0, 3).join(' OR ')})`;
 
       // News API 호출 (최근 2주 필터링, 경제 관련, 최대 50개)
-      // from 파라미터를 제거하고 클라이언트에서 필터링 (News API 제한 회피)
-      const apiUrl = `${NEWS_API_BASE_URL}/everything?q=${encodeURIComponent(searchQuery)}&language=ko&sortBy=publishedAt&pageSize=50&apiKey=${NEWS_API_KEY}`;
+      // from 파라미터를 사용하여 최근 2주 데이터만 가져오고, sortBy=relevancy로 최신/관련성 높은 뉴스 우선
+      const apiUrl = `${NEWS_API_BASE_URL}/everything?q=${encodeURIComponent(searchQuery)}&language=ko&sortBy=relevancy&from=${fromDate}&to=${toDate}&pageSize=50&apiKey=${NEWS_API_KEY}`;
       
       console.log(`[API 서버] News API 호출 (경제): ${apiUrl}`);
       console.log(`[API 서버] 프록시 사용: ${PROXY_URL}`);
-      console.log(`[API 서버] 검색 기간: 최근 1개월 (클라이언트에서 2주 필터링)`);
+      console.log(`[API 서버] 검색 기간: ${fromDate} ~ ${toDate} (최근 2주)`);
       
       const response = await makeRequest(apiUrl);
       
@@ -1603,13 +1604,13 @@ const server = http.createServer(async (req, res) => {
       
       const pageData = await response.json();
       
-      // 결과가 없으면 더 넓은 검색 시도
+      // 결과가 없으면 더 넓은 검색 시도 (날짜 제한 없이)
       if (!pageData.articles || pageData.articles.length === 0) {
         console.log(`[API 서버] 첫 검색 결과 없음, 더 넓은 검색 시도...`);
         
-        // 더 단순한 검색 쿼리로 재시도
+        // 더 단순한 검색 쿼리로 재시도 (날짜 제한 없이)
         const simpleQuery = '경제 OR economy OR 금융 OR finance';
-        const retryApiUrl = `${NEWS_API_BASE_URL}/everything?q=${encodeURIComponent(simpleQuery)}&language=ko&sortBy=publishedAt&pageSize=50&apiKey=${NEWS_API_KEY}`;
+        const retryApiUrl = `${NEWS_API_BASE_URL}/everything?q=${encodeURIComponent(simpleQuery)}&language=ko&sortBy=relevancy&from=${fromDate}&to=${toDate}&pageSize=50&apiKey=${NEWS_API_KEY}`;
         
         console.log(`[API 서버] 재시도 검색: ${retryApiUrl}`);
         const retryResponse = await makeRequest(retryApiUrl);
@@ -1623,22 +1624,36 @@ const server = http.createServer(async (req, res) => {
         }
       }
       
-      // 2주 이상 지난 기사 필터링
+      // 날짜로 필터링 및 최신순 정렬 (이중 체크)
       const now = new Date();
       const twoWeeksAgoDate = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000);
       let filteredArticles = [];
       if (pageData.articles) {
-        filteredArticles = pageData.articles.filter(article => {
-          if (!article.publishedAt) return false;
-          const publishedDate = new Date(article.publishedAt);
-          return publishedDate >= twoWeeksAgoDate;
-        });
+        filteredArticles = pageData.articles
+          .filter(article => {
+            if (!article.publishedAt) return false;
+            const publishedDate = new Date(article.publishedAt);
+            return publishedDate >= twoWeeksAgoDate;
+          })
+          // 최신순으로 정렬 (내림차순)
+          .sort((a, b) => {
+            const dateA = new Date(a.publishedAt || 0);
+            const dateB = new Date(b.publishedAt || 0);
+            return dateB - dateA; // 최신 것이 먼저
+          });
       }
       
-      // 필터링 후 결과가 없으면 필터링 없이 최근 기사 표시
+      // 필터링 후 결과가 없으면 날짜 제한 없이 최신 기사 표시
       if (filteredArticles.length === 0 && pageData.articles && pageData.articles.length > 0) {
-        console.log(`[API 서버] 2주 필터링 후 결과 없음, 전체 기사 사용 (${pageData.articles.length}개)`);
-        filteredArticles = pageData.articles.slice(0, 50); // 최대 50개
+        console.log(`[API 서버] 2주 필터링 후 결과 없음, 전체 기사 사용 (최신순 정렬)`);
+        filteredArticles = pageData.articles
+          .filter(article => article.publishedAt) // 날짜가 있는 것만
+          .sort((a, b) => {
+            const dateA = new Date(a.publishedAt || 0);
+            const dateB = new Date(b.publishedAt || 0);
+            return dateB - dateA; // 최신 것이 먼저
+          })
+          .slice(0, 50); // 최대 50개
       }
       
       // 중복 제거 (URL 기준)
@@ -1995,8 +2010,42 @@ const server = http.createServer(async (req, res) => {
         installed: false,
         running: false,
         version: null,
-        containers: []
+        containers: [],
+        useWSL: false,
+        wslMessage: null
       };
+
+      // WSL 환경 감지 (Windows 환경에서 WSL 사용 여부 확인)
+      try {
+        // Windows 환경인지 확인
+        if (process.platform === 'win32') {
+          // WSL이 설치되어 있는지 확인
+          try {
+            const { stdout: wslListOutput } = await execAsync('wsl --list --quiet 2>nul || echo ""');
+            if (wslListOutput && wslListOutput.trim()) {
+              // WSL 내에서 Docker가 작동하는지 확인
+              try {
+                await execAsync('wsl docker --version 2>nul');
+                dockerStatus.useWSL = true;
+                dockerStatus.wslMessage = 'WSL 2 환경에서 Docker Engine을 사용 중입니다. 모든 명령어는 WSL을 통해 실행됩니다.';
+              } catch {
+                // WSL 내에 Docker가 없으면 일반 Docker 사용
+                dockerStatus.useWSL = false;
+                dockerStatus.wslMessage = null;
+              }
+            }
+          } catch {
+            // WSL 확인 실패 시 일반 Docker 사용
+            dockerStatus.useWSL = false;
+            dockerStatus.wslMessage = null;
+          }
+        }
+      } catch (error) {
+        // 환경 감지 실패 시 일반 Docker 사용
+        dockerStatus.useWSL = false;
+        dockerStatus.wslMessage = null;
+        console.log('[API 서버] 환경 감지 실패:', error.message);
+      }
 
       // Docker 설치 확인
       try {
@@ -2064,6 +2113,286 @@ const server = http.createServer(async (req, res) => {
   }
 
   // ============================================
+  // Docker 컨테이너 제어 API
+  // ============================================
+  
+  // 컨테이너 시작: POST /api/docker/start
+  else if ((req.url === '/api/docker/start' || req.url.split('?')[0] === '/api/docker/start') && req.method === 'POST') {
+    try {
+      console.log('[API 서버] Docker 컨테이너 시작 요청:', req.url);
+      
+      // Docker Compose 명령어 확인
+      let dockerComposeCmd = 'docker compose';
+      try {
+        await execAsync('docker compose version');
+      } catch {
+        try {
+          await execAsync('docker-compose --version');
+          dockerComposeCmd = 'docker-compose';
+        } catch {
+          return sendJSON(res, 400, {
+            success: false,
+            error: 'Docker Compose가 설치되어 있지 않습니다.'
+          });
+        }
+      }
+      
+      // WSL 환경 확인 (WSL이 설치되어 있고 Docker가 WSL 내에 있는 경우만 사용)
+      let useWSL = false;
+      if (process.platform === 'win32') {
+        try {
+          // WSL이 설치되어 있는지 확인
+          const { stdout: wslListOutput } = await execAsync('wsl --list --quiet 2>nul || echo ""');
+          if (wslListOutput && wslListOutput.trim()) {
+            // WSL 내에서 Docker가 작동하는지 확인
+            try {
+              await execAsync('wsl docker --version 2>nul');
+              useWSL = true;
+            } catch {
+              // WSL 내에 Docker가 없으면 일반 명령어 사용
+              useWSL = false;
+            }
+          }
+        } catch {
+          // WSL 확인 실패 시 일반 명령어 사용
+          useWSL = false;
+        }
+      }
+      
+      // 컨테이너 시작 명령어 실행
+      const command = useWSL ? `wsl ${dockerComposeCmd} up -d` : `${dockerComposeCmd} up -d`;
+      console.log('[API 서버] 실행 명령어:', command);
+      
+      const { stdout, stderr } = await execAsync(command, { cwd: __dirname });
+      
+        return sendJSON(res, 200, {
+          success: true,
+          message: '컨테이너가 시작되었습니다.',
+          output: stdout,
+          useWSL: useWSL
+        });
+    } catch (error) {
+      console.error('[API 서버] Docker 컨테이너 시작 오류:', error);
+      return sendJSON(res, 500, {
+        success: false,
+        error: `컨테이너 시작 중 오류가 발생했습니다: ${error.message}`
+      });
+    }
+  }
+  
+  // 컨테이너 중지: POST /api/docker/stop
+  else if ((req.url === '/api/docker/stop' || req.url.split('?')[0] === '/api/docker/stop') && req.method === 'POST') {
+    try {
+      console.log('[API 서버] Docker 컨테이너 중지 요청:', req.url);
+      
+      // Docker Compose 명령어 확인
+      let dockerComposeCmd = 'docker compose';
+      try {
+        await execAsync('docker compose version');
+      } catch {
+        try {
+          await execAsync('docker-compose --version');
+          dockerComposeCmd = 'docker-compose';
+        } catch {
+          return sendJSON(res, 400, {
+            success: false,
+            error: 'Docker Compose가 설치되어 있지 않습니다.'
+          });
+        }
+      }
+      
+      // WSL 환경 확인 (WSL이 설치되어 있고 Docker가 WSL 내에 있는 경우만 사용)
+      let useWSL = false;
+      if (process.platform === 'win32') {
+        try {
+          // WSL이 설치되어 있는지 확인
+          const { stdout: wslListOutput } = await execAsync('wsl --list --quiet 2>nul || echo ""');
+          if (wslListOutput && wslListOutput.trim()) {
+            // WSL 내에서 Docker가 작동하는지 확인
+            try {
+              await execAsync('wsl docker --version 2>nul');
+              useWSL = true;
+            } catch {
+              // WSL 내에 Docker가 없으면 일반 명령어 사용
+              useWSL = false;
+            }
+          }
+        } catch {
+          // WSL 확인 실패 시 일반 명령어 사용
+          useWSL = false;
+        }
+      }
+      
+      // 컨테이너 중지 명령어 실행
+      const command = useWSL ? `wsl ${dockerComposeCmd} down` : `${dockerComposeCmd} down`;
+      console.log('[API 서버] 실행 명령어:', command);
+      
+      const { stdout, stderr } = await execAsync(command, { cwd: __dirname });
+      
+        return sendJSON(res, 200, {
+          success: true,
+          message: '컨테이너가 중지되었습니다.',
+          output: stdout,
+          useWSL: useWSL
+        });
+    } catch (error) {
+      console.error('[API 서버] Docker 컨테이너 중지 오류:', error);
+      return sendJSON(res, 500, {
+        success: false,
+        error: `컨테이너 중지 중 오류가 발생했습니다: ${error.message}`
+      });
+    }
+  }
+  
+  // 컨테이너 재시작: POST /api/docker/restart
+  else if ((req.url === '/api/docker/restart' || req.url.split('?')[0] === '/api/docker/restart') && req.method === 'POST') {
+    try {
+      console.log('[API 서버] Docker 컨테이너 재시작 요청:', req.url);
+      
+      // Docker Compose 명령어 확인
+      let dockerComposeCmd = 'docker compose';
+      try {
+        await execAsync('docker compose version');
+      } catch {
+        try {
+          await execAsync('docker-compose --version');
+          dockerComposeCmd = 'docker-compose';
+        } catch {
+          return sendJSON(res, 400, {
+            success: false,
+            error: 'Docker Compose가 설치되어 있지 않습니다.'
+          });
+        }
+      }
+      
+      // WSL 환경 확인 (WSL이 설치되어 있고 Docker가 WSL 내에 있는 경우만 사용)
+      let useWSL = false;
+      if (process.platform === 'win32') {
+        try {
+          // WSL이 설치되어 있는지 확인
+          const { stdout: wslListOutput } = await execAsync('wsl --list --quiet 2>nul || echo ""');
+          if (wslListOutput && wslListOutput.trim()) {
+            // WSL 내에서 Docker가 작동하는지 확인
+            try {
+              await execAsync('wsl docker --version 2>nul');
+              useWSL = true;
+            } catch {
+              // WSL 내에 Docker가 없으면 일반 명령어 사용
+              useWSL = false;
+            }
+          }
+        } catch {
+          // WSL 확인 실패 시 일반 명령어 사용
+          useWSL = false;
+        }
+      }
+      
+      // 컨테이너 재시작 명령어 실행
+      const command = useWSL ? `wsl ${dockerComposeCmd} restart` : `${dockerComposeCmd} restart`;
+      console.log('[API 서버] 실행 명령어:', command);
+      
+      const { stdout, stderr } = await execAsync(command, { cwd: __dirname });
+      
+        return sendJSON(res, 200, {
+          success: true,
+          message: '컨테이너가 재시작되었습니다.',
+          output: stdout,
+          useWSL: useWSL
+        });
+    } catch (error) {
+      console.error('[API 서버] Docker 컨테이너 재시작 오류:', error);
+      return sendJSON(res, 500, {
+        success: false,
+        error: `컨테이너 재시작 중 오류가 발생했습니다: ${error.message}`
+      });
+    }
+  }
+
+  // ============================================
+  // 문서 관리 API
+  // ============================================
+  
+  // 문서 목록 조회: GET /api/docs/list
+  else if ((req.url === '/api/docs/list' || req.url.split('?')[0] === '/api/docs/list') && req.method === 'GET') {
+    try {
+      console.log('[API 서버] 문서 목록 조회 요청:', req.url);
+      const docsDir = join(__dirname, 'docs');
+      const files = readdirSync(docsDir);
+      
+      const markdownFiles = files
+        .filter(file => file.endsWith('.md'))
+        .map(file => {
+          const filePath = join(docsDir, file);
+          const stats = statSync(filePath);
+          return {
+            name: file,
+            title: file.replace('.md', '').replace(/_/g, ' '),
+            size: stats.size,
+            modified: stats.mtime.toISOString(),
+            path: `/api/docs/content/${encodeURIComponent(file)}`
+          };
+        })
+        .sort((a, b) => b.modified.localeCompare(a.modified)); // 최신순 정렬
+      
+      return sendJSON(res, 200, {
+        success: true,
+        docs: markdownFiles,
+        count: markdownFiles.length
+      });
+    } catch (error) {
+      console.error('[API 서버] 문서 목록 조회 오류:', error);
+      return sendJSON(res, 500, {
+        success: false,
+        error: `문서 목록 조회 중 오류가 발생했습니다: ${error.message}`
+      });
+    }
+  }
+  
+  // 문서 내용 조회: GET /api/docs/content/:filename
+  else if (req.url.startsWith('/api/docs/content/') && req.method === 'GET') {
+    try {
+      const urlParts = req.url.split('/');
+      const encodedFilename = urlParts[urlParts.length - 1];
+      const filename = decodeURIComponent(encodedFilename);
+      
+      // 보안: 파일명에 .. 또는 / 포함 시 차단
+      if (filename.includes('..') || filename.includes('/') || filename.includes('\\')) {
+        return sendJSON(res, 400, {
+          success: false,
+          error: '잘못된 파일명입니다.'
+        });
+      }
+      
+      console.log('[API 서버] 문서 내용 조회 요청:', filename);
+      const filePath = join(__dirname, 'docs', filename);
+      
+      try {
+        const content = readFileSync(filePath, 'utf-8');
+        return sendJSON(res, 200, {
+          success: true,
+          filename: filename,
+          title: filename.replace('.md', '').replace(/_/g, ' '),
+          content: content
+        });
+      } catch (fileError) {
+        if (fileError.code === 'ENOENT') {
+          return sendJSON(res, 404, {
+            success: false,
+            error: '파일을 찾을 수 없습니다.'
+          });
+        }
+        throw fileError;
+      }
+    } catch (error) {
+      console.error('[API 서버] 문서 내용 조회 오류:', error);
+      return sendJSON(res, 500, {
+        success: false,
+        error: `문서 내용 조회 중 오류가 발생했습니다: ${error.message}`
+      });
+    }
+  }
+
+  // ============================================
   // Swagger UI
   // ============================================
   // 엔드포인트: GET /api-docs
@@ -2125,6 +2454,43 @@ const server = http.createServer(async (req, res) => {
       res.end(JSON.stringify({ error: error.message }));
     }
   }
+  // 리니지 HTML 파일 제공 엔드포인트
+  else if (req.url && req.url.startsWith('/api/lineage/')) {
+    try {
+      // URL에서 파일 경로 추출: /api/lineage/queries/sql_analysis/file.html
+      const filePath = req.url.replace('/api/lineage/', '').replace(/^\//, '');
+      const fullPath = join(__dirname, filePath);
+      
+      console.log('[API 서버] 리니지 HTML 파일 요청:', {
+        url: req.url,
+        filePath: filePath,
+        fullPath: fullPath
+      });
+      
+      // 보안: 상위 디렉토리 접근 방지
+      if (fullPath.indexOf(__dirname) !== 0) {
+        res.writeHead(403, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Access denied' }));
+        return;
+      }
+      
+      if (fs.existsSync(fullPath) && fullPath.endsWith('.html')) {
+        const htmlContent = fs.readFileSync(fullPath, 'utf-8');
+        res.writeHead(200, { 
+          'Content-Type': 'text/html; charset=utf-8',
+          'Access-Control-Allow-Origin': '*'
+        });
+        res.end(htmlContent);
+      } else {
+        res.writeHead(404, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'File not found', path: filePath }));
+      }
+    } catch (error) {
+      console.error('[API 서버] 리니지 HTML 파일 제공 오류:', error);
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: error.message }));
+    }
+  }
   // Swagger JSON 제공
   else if (req.url === '/swagger.json') {
     try {
@@ -2170,7 +2536,21 @@ const server = http.createServer(async (req, res) => {
           }
         };
         
+        // 타임아웃 설정 (130초 - Python 서버 타임아웃보다 길게)
+        const timeout = setTimeout(() => {
+          if (!res.headersSent) {
+            console.error('[API 서버] 화면 검증 프록시 타임아웃 (130초)');
+            proxyReq.destroy();
+            res.writeHead(504, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ 
+              success: false,
+              error: 'Python 서버 응답 타임아웃 (130초 초과). 서버가 응답하지 않습니다.'
+            }));
+          }
+        }, 130000); // 130초
+        
         const proxyReq = http.request(requestOptions, (proxyRes) => {
+          clearTimeout(timeout);
           let proxyBody = '';
           
           proxyRes.on('data', (chunk) => {
@@ -2178,21 +2558,50 @@ const server = http.createServer(async (req, res) => {
           });
           
           proxyRes.on('end', () => {
-            res.writeHead(proxyRes.statusCode, {
-              'Content-Type': 'application/json',
-              'Access-Control-Allow-Origin': '*'
-            });
-            res.end(proxyBody);
+            if (!res.headersSent) {
+              res.writeHead(proxyRes.statusCode || 200, {
+                'Content-Type': 'application/json',
+                'Access-Control-Allow-Origin': '*'
+              });
+              res.end(proxyBody);
+            }
+          });
+          
+          proxyRes.on('error', (error) => {
+            clearTimeout(timeout);
+            if (!res.headersSent) {
+              console.error('[API 서버] Python 서버 응답 오류:', error);
+              res.writeHead(500, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ 
+                success: false,
+                error: `Python 서버 응답 오류: ${error.message}`
+              }));
+            }
           });
         });
         
         proxyReq.on('error', (error) => {
-          console.error('[API 서버] 화면 검증 프록시 오류:', error);
-          res.writeHead(500, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ 
-            success: false,
-            error: `Python 서버 연결 실패: ${error.message}. Python HTTP 서버가 실행 중인지 확인하세요. (포트 3002)`
-          }));
+          clearTimeout(timeout);
+          if (!res.headersSent) {
+            console.error('[API 서버] 화면 검증 프록시 오류:', error);
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ 
+              success: false,
+              error: `Python 서버 연결 실패: ${error.message}. Python HTTP 서버가 실행 중인지 확인하세요. (포트 3002)`
+            }));
+          }
+        });
+        
+        proxyReq.setTimeout(130000, () => {
+          if (!res.headersSent) {
+            console.error('[API 서버] 프록시 요청 타임아웃');
+            proxyReq.destroy();
+            res.writeHead(504, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ 
+              success: false,
+              error: 'Python 서버 연결 타임아웃 (130초 초과)'
+            }));
+          }
         });
         
         proxyReq.write(body);
@@ -2204,6 +2613,732 @@ const server = http.createServer(async (req, res) => {
         res.end(JSON.stringify({ success: false, error: error.message }));
       }
     });
+  }
+  
+  // SQL 쿼리 분석 API
+  // 엔드포인트: POST /api/sql/analyze
+  // 기능: MCP SQL 쿼리 분석 서버를 통해 쿼리 분석 수행
+  else if ((req.url === '/api/sql/analyze' || req.url.startsWith('/api/sql/analyze')) && req.method === 'POST') {
+    console.log('[API 서버] SQL 쿼리 분석 요청 수신:', req.url, req.method);
+    
+    // 요청 타임아웃 설정 (5분)
+    req.setTimeout(300000, () => {
+      if (!res.headersSent) {
+        console.error('[API 서버] SQL 쿼리 분석 요청 타임아웃 (5분 초과)');
+        res.writeHead(504, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ 
+          success: false,
+          error: '요청 타임아웃: SQL 쿼리 분석에 시간이 너무 오래 걸립니다. (5분 초과)'
+        }));
+      }
+    });
+    
+    let body = '';
+    const maxBodySize = 50 * 1024 * 1024; // 50MB 제한
+    let bodySize = 0;
+    
+    req.on('data', chunk => {
+      bodySize += chunk.length;
+      if (bodySize > maxBodySize) {
+        console.error('[API 서버] 요청 본문 크기 초과:', bodySize);
+        res.writeHead(413, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ 
+          success: false,
+          error: '요청 본문이 너무 큽니다. (50MB 초과)'
+        }));
+        return;
+      }
+      body += chunk.toString('utf-8');
+    });
+    
+    req.on('end', async () => {
+      try {
+        const requestData = JSON.parse(body);
+        const { query_file, query_text, output_format = 'both' } = requestData;
+        
+        console.log('[API 서버] SQL 쿼리 분석 요청');
+        console.log('[API 서버] 요청 데이터:', { query_file, has_query_text: !!query_text, output_format });
+        
+        if (!query_file && !query_text) {
+          return sendJSON(res, 400, {
+            success: false,
+            error: 'SQL 쿼리 또는 파일 경로를 제공해야 합니다.'
+          });
+        }
+        
+        // Python 스크립트 실행을 위한 명령어 구성
+        const pythonScript = join(__dirname, 'test-sql-query-analyzer.py');
+        let command = `python "${pythonScript}"`;
+        
+        // 임시 SQL 파일 생성 (query_text가 있는 경우)
+        let tempFile = null;
+        const fs = await import('fs');
+        const path = await import('path');
+        
+        if (query_text && !query_file) {
+          tempFile = join(__dirname, 'temp_query_' + Date.now() + '.sql');
+          fs.writeFileSync(tempFile, query_text, 'utf-8');
+          
+          // 파일 크기 확인
+          const fileSize = fs.statSync(tempFile).size;
+          const fileSizeMB = (fileSize / (1024 * 1024)).toFixed(2);
+          console.log(`[API 서버] 임시 SQL 파일 생성 완료 (크기: ${fileSizeMB}MB)`);
+          
+          if (fileSize > 10 * 1024 * 1024) { // 10MB 초과
+            console.warn(`[API 서버] 큰 파일 경고: ${fileSizeMB}MB`);
+          }
+          
+          command += ` "${tempFile}"`;
+        } else if (query_file) {
+          // 상대 경로를 절대 경로로 변환
+          let filePath = query_file;
+          
+          // 상대 경로인 경우 프로젝트 루트 기준으로 변환
+          if (!path.isAbsolute(query_file)) {
+            filePath = join(__dirname, query_file);
+          }
+          
+          // 파일 존재 여부 확인
+          if (!fs.existsSync(filePath)) {
+            return sendJSON(res, 400, {
+              success: false,
+              error: `SQL 파일을 찾을 수 없습니다: ${query_file}\n절대 경로: ${filePath}`
+            });
+          }
+          
+          // 파일 크기 확인
+          const fileSize = fs.statSync(filePath).size;
+          const fileSizeMB = (fileSize / (1024 * 1024)).toFixed(2);
+          const fileLines = fs.readFileSync(filePath, 'utf-8').split('\n').length;
+          console.log(`[API 서버] SQL 파일 정보: ${filePath}`);
+          console.log(`[API 서버] 파일 크기: ${fileSizeMB}MB, 라인 수: ${fileLines}`);
+          
+          if (fileSize > 10 * 1024 * 1024) { // 10MB 초과
+            console.warn(`[API 서버] 큰 파일 경고: ${fileSizeMB}MB`);
+          }
+          
+          command += ` "${filePath}"`;
+        }
+        
+        // Python 스크립트 실행
+        console.log('[API 서버] 실행 명령어:', command);
+        console.log('[API 서버] 큰 파일 분석 시작 (타임아웃: 5분, 버퍼: 50MB)');
+        
+        const startTime = Date.now();
+        let stdout, stderr;
+        
+        try {
+          const result = await execAsync(command, {
+            cwd: __dirname,
+            maxBuffer: 50 * 1024 * 1024, // 50MB로 증가 (큰 파일 처리)
+            timeout: 300000 // 5분 타임아웃
+          });
+          stdout = result.stdout;
+          stderr = result.stderr;
+        } catch (execError) {
+          // execAsync는 에러가 발생해도 stdout/stderr를 반환할 수 있음
+          stdout = execError.stdout || '';
+          stderr = execError.stderr || execError.message || '';
+          
+          console.error('[API 서버] Python 스크립트 실행 오류:', execError.message);
+          console.error('[API 서버] stderr:', stderr.substring(0, 1000));
+          
+          // 타임아웃 오류인지 확인
+          if (execError.code === 'TIMEOUT' || execError.signal === 'SIGTERM') {
+            return sendJSON(res, 504, {
+              success: false,
+              error: 'SQL 쿼리 분석 타임아웃: 분석에 시간이 너무 오래 걸립니다. (5분 초과)',
+              suggestion: '쿼리를 더 작은 단위로 분할하거나 복잡도를 줄여주세요.'
+            });
+          }
+          
+          // 버퍼 오버플로우 오류
+          if (execError.code === 'ENOBUFS' || stderr.includes('maxBuffer')) {
+            return sendJSON(res, 413, {
+              success: false,
+              error: '분석 결과가 너무 큽니다. 쿼리를 더 작은 단위로 분할해주세요.',
+              suggestion: '큰 쿼리는 여러 개의 작은 쿼리로 나누어 분석하세요.'
+            });
+          }
+          
+          // 기타 실행 오류
+          return sendJSON(res, 500, {
+            success: false,
+            error: `Python 스크립트 실행 오류: ${execError.message}`,
+            stderr: stderr.substring(0, 2000),
+            stdout: stdout.substring(0, 1000)
+          });
+        }
+        
+        const elapsedTime = ((Date.now() - startTime) / 1000).toFixed(2);
+        console.log(`[API 서버] Python 스크립트 실행 완료 (소요 시간: ${elapsedTime}초)`);
+        
+        console.log('[API 서버] Python 스크립트 stdout:', stdout.substring(0, 500));
+        if (stderr) {
+          console.log('[API 서버] Python 스크립트 stderr:', stderr.substring(0, 500));
+        }
+        
+        // 임시 파일 삭제 (나중에 삭제 - 결과 파일 찾은 후)
+        let tempFileToDelete = tempFile;
+        
+        // 분석 결과 파일 찾기
+        const fs = await import('fs');
+        const path = await import('path');
+        const logsDir = join(__dirname, 'logs', 'sql_analysis');
+        
+        // 디렉토리가 없으면 생성
+        if (!fs.existsSync(logsDir)) {
+          fs.mkdirSync(logsDir, { recursive: true });
+        }
+        
+        // 가장 최근 생성된 분석 결과 파일 찾기 (최대 5초 전까지)
+        const now = Date.now();
+        const files = fs.readdirSync(logsDir)
+          .filter(f => f.endsWith('.json') && !f.includes('lineage'))
+          .map(f => {
+            const filePath = join(logsDir, f);
+            const stats = fs.statSync(filePath);
+            return {
+              name: f,
+              path: filePath,
+              time: stats.mtime.getTime()
+            };
+          })
+          .filter(f => (now - f.time) < 5000) // 5초 이내 생성된 파일만
+          .sort((a, b) => b.time - a.time);
+        
+        console.log('[API 서버] 찾은 결과 파일 수:', files.length);
+        if (files.length > 0) {
+          console.log('[API 서버] 가장 최근 파일:', files[0].name);
+        }
+        
+        // 임시 파일 삭제
+        if (tempFileToDelete) {
+          try {
+            const fs = await import('fs');
+            if (fs.existsSync(tempFileToDelete)) {
+              fs.unlinkSync(tempFileToDelete);
+              console.log('[API 서버] 임시 파일 삭제 완료:', tempFileToDelete);
+            }
+          } catch (e) {
+            console.warn('[API 서버] 임시 파일 삭제 실패:', e.message);
+          }
+        }
+        
+        if (files.length === 0) {
+          return sendJSON(res, 500, {
+            success: false,
+            error: '분석 결과 파일을 찾을 수 없습니다. Python 스크립트 실행을 확인하세요.',
+            stderr: stderr,
+            stdout: stdout.substring(0, 1000)
+          });
+        }
+        
+        // 가장 최근 JSON 파일 읽기
+        const latestJsonFile = files[0].path;
+        const jsonContent = fs.readFileSync(latestJsonFile, 'utf-8');
+        const parsedFile = JSON.parse(jsonContent);
+        
+        // JSON 파일 구조 확인: { "json": {...}, "markdown": "..." } 형태일 수 있음
+        const analysisResult = parsedFile.json || parsedFile;
+        
+        // 디버깅: lineage 데이터 확인
+        console.log('[API 서버] 분석 결과 lineage 확인:', {
+          fileHasJsonKey: !!parsedFile.json,
+          hasLineage: !!analysisResult.lineage,
+          lineageKeys: analysisResult.lineage ? Object.keys(analysisResult.lineage) : [],
+          joinRelationshipsCount: analysisResult.lineage?.join_relationships?.length || 0
+        });
+        
+        // 마크다운 파일도 찾기
+        const mdFile = latestJsonFile.replace('.json', '.md');
+        let markdownContent = parsedFile.markdown || null;
+        if (!markdownContent && fs.existsSync(mdFile)) {
+          markdownContent = fs.readFileSync(mdFile, 'utf-8');
+        }
+        
+        // 리니지 HTML 파일 생성 또는 찾기
+        let lineageHtmlPath = null;
+        
+        // SQL 파일 경로 확인 (리니지 시각화 생성용)
+        let sqlFilePathForLineage = null;
+        if (query_file) {
+          if (!path.isAbsolute(query_file)) {
+            sqlFilePathForLineage = join(__dirname, query_file);
+          } else {
+            sqlFilePathForLineage = query_file;
+          }
+        } else if (tempFile) {
+          sqlFilePathForLineage = tempFile;
+        }
+        
+        // 리니지 시각화 생성 스크립트 실행
+        if (sqlFilePathForLineage && fs.existsSync(sqlFilePathForLineage)) {
+          try {
+            const lineageScript = join(__dirname, 'generate_lineage_visualization.py');
+            if (fs.existsSync(lineageScript)) {
+              const lineageCommand = `python "${lineageScript}" "${sqlFilePathForLineage}"`;
+              console.log('[API 서버] 리니지 시각화 생성 명령어:', lineageCommand);
+              
+              // 동기적으로 실행하고 결과 대기
+              let lineageStdout, lineageStderr;
+              try {
+                const lineageResult = await execAsync(lineageCommand, {
+                  cwd: __dirname,
+                  maxBuffer: 50 * 1024 * 1024 // 50MB로 증가
+                });
+                lineageStdout = lineageResult.stdout;
+                lineageStderr = lineageResult.stderr;
+                console.log('[API 서버] 리니지 시각화 생성 완료');
+              } catch (lineageError) {
+                lineageStdout = lineageError.stdout || '';
+                lineageStderr = lineageError.stderr || lineageError.message || '';
+                console.error('[API 서버] 리니지 시각화 생성 오류:', lineageError.message);
+                console.error('[API 서버] 리니지 stderr:', lineageStderr.substring(0, 1000));
+                // 리니지 생성 실패해도 분석 결과는 반환
+              }
+              console.log('[API 서버] 리니지 시각화 stdout:', lineageStdout.substring(0, 1000));
+              if (lineageStderr) {
+                console.warn('[API 서버] 리니지 시각화 stderr:', lineageStderr.substring(0, 500));
+              }
+              
+              // stdout에서 HTML 파일 경로 추출 시도
+              if (lineageStdout) {
+                console.log('[API 서버] 리니지 stdout 전체:', lineageStdout);
+                // 여러 패턴으로 시도
+                const patterns = [
+                  /시각화 HTML 저장:\s*(.+\.html)/i,
+                  /HTML 저장:\s*(.+\.html)/i,
+                  /시각화.*HTML.*:\s*(.+\.html)/i,
+                  /시각화.*저장:\s*(.+\.html)/i,
+                  /\.html/i  // .html이 포함된 라인 찾기
+                ];
+                
+                let extractedPath = null;
+                for (let i = 0; i < patterns.length; i++) {
+                  const pattern = patterns[i];
+                  const match = lineageStdout.match(pattern);
+                  if (match && match[1]) {
+                    extractedPath = match[1].trim();
+                    // 따옴표 제거
+                    extractedPath = extractedPath.replace(/^["']|["']$/g, '');
+                    break;
+                  } else if (i === 4 && match) {
+                    // 마지막 패턴(.html)인 경우 라인별로 검색
+                    const lines = lineageStdout.split('\n');
+                    for (const line of lines) {
+                      if (line.includes('.html') && (line.includes('시각화') || line.includes('HTML') || line.includes('저장'))) {
+                        // "시각화 HTML 저장: 경로" 패턴 찾기
+                        const pathMatch = line.match(/시각화\s+HTML\s+저장:\s*(.+\.html)/i);
+                        if (pathMatch && pathMatch[1]) {
+                          extractedPath = pathMatch[1].trim().replace(/^["']|["']$/g, '');
+                          break;
+                        }
+                        // 일반적인 경로 패턴 찾기
+                        const generalMatch = line.match(/([^\s]+\.html)/);
+                        if (generalMatch) {
+                          extractedPath = generalMatch[1].trim().replace(/^["']|["']$/g, '');
+                          break;
+                        }
+                      }
+                    }
+                    if (extractedPath) break;
+                  }
+                }
+                
+                if (extractedPath) {
+                  // 절대 경로를 상대 경로로 변환
+                  if (path.isAbsolute(extractedPath)) {
+                    lineageHtmlPath = path.relative(__dirname, extractedPath).replace(/\\/g, '/');
+                  } else {
+                    lineageHtmlPath = extractedPath.replace(/\\/g, '/');
+                  }
+                  console.log('[API 서버] stdout에서 리니지 HTML 파일 경로 추출:', {
+                    원본: extractedPath,
+                    변환: lineageHtmlPath
+                  });
+                } else {
+                  console.warn('[API 서버] stdout에서 HTML 경로를 추출하지 못했습니다.');
+                  console.warn('[API 서버] stdout 내용:', lineageStdout.substring(0, 2000));
+                }
+              }
+              
+              // 파일 생성 대기 (더 긴 대기 시간)
+              await new Promise(resolve => setTimeout(resolve, 2000));
+              
+              // stdout에서 경로를 찾지 못했으면 파일 검색으로 찾기 시도
+              if (!lineageHtmlPath && sqlFilePathForLineage) {
+                const sqlFileDir = path.dirname(sqlFilePathForLineage);
+                const sqlAnalysisDir = join(sqlFileDir, 'sql_analysis');
+                if (fs.existsSync(sqlAnalysisDir)) {
+                  try {
+                    const files = fs.readdirSync(sqlAnalysisDir)
+                      .filter(f => f.includes('_lineage_visualization_') && f.endsWith('.html'))
+                      .map(f => {
+                        const filePath = join(sqlAnalysisDir, f);
+                        const stats = fs.statSync(filePath);
+                        return {
+                          name: f,
+                          path: filePath,
+                          time: stats.mtime.getTime()
+                        };
+                      })
+                      .sort((a, b) => b.time - a.time);
+                    
+                    if (files.length > 0) {
+                      const latestFile = files[0];
+                      lineageHtmlPath = path.relative(__dirname, latestFile.path).replace(/\\/g, '/');
+                      console.log('[API 서버] 즉시 파일 검색으로 리니지 HTML 파일 찾음:', lineageHtmlPath);
+                    }
+                  } catch (err) {
+                    console.warn('[API 서버] 즉시 파일 검색 실패:', err.message);
+                  }
+                }
+              }
+            }
+          } catch (err) {
+            console.warn('[API 서버] 리니지 시각화 생성 중 오류:', err.message);
+          }
+        }
+        
+        // 리니지 HTML 파일 찾기 - stdout에서 찾지 못한 경우에만 파일 검색 수행
+        if (!lineageHtmlPath) {
+          const searchDirs = [
+            logsDir, // logs/sql_analysis
+            join(__dirname, 'queries', 'sql_analysis'), // queries/sql_analysis
+          ];
+          
+          // SQL 파일 위치의 sql_analysis 디렉토리 추가
+          if (sqlFilePathForLineage) {
+            const sqlFileDir = path.dirname(sqlFilePathForLineage);
+            const sqlAnalysisDir = join(sqlFileDir, 'sql_analysis');
+            if (!searchDirs.includes(sqlAnalysisDir)) {
+              searchDirs.push(sqlAnalysisDir);
+            }
+          }
+          
+          // temp 파일의 경우 logs/sql_analysis도 확인
+          if (tempFile) {
+            const tempFileDir = path.dirname(tempFile);
+            const tempAnalysisDir = join(tempFileDir, 'sql_analysis');
+            if (fs.existsSync(tempAnalysisDir) && !searchDirs.includes(tempAnalysisDir)) {
+              searchDirs.push(tempAnalysisDir);
+            }
+          }
+          
+          console.log('[API 서버] 리니지 HTML 파일 검색 디렉토리:', searchDirs);
+          
+          let allHtmlFiles = [];
+          for (const searchDir of searchDirs) {
+            if (fs.existsSync(searchDir)) {
+              try {
+                const files = fs.readdirSync(searchDir)
+                  .filter(f => f.includes('_lineage_visualization_') && f.endsWith('.html'))
+                  .map(f => {
+                    const filePath = join(searchDir, f);
+                    const stats = fs.statSync(filePath);
+                    return {
+                      name: f,
+                      path: filePath,
+                      time: stats.mtime.getTime()
+                    };
+                  })
+                  .filter(f => (now - f.time) < 120000) // 120초(2분) 이내 생성된 파일만
+                  .sort((a, b) => b.time - a.time);
+                
+                allHtmlFiles = allHtmlFiles.concat(files);
+              } catch (err) {
+                console.warn(`[API 서버] 디렉토리 검색 실패 (${searchDir}):`, err.message);
+              }
+            }
+          }
+          
+          // 가장 최근 파일 선택
+          if (allHtmlFiles.length > 0) {
+            allHtmlFiles.sort((a, b) => b.time - a.time);
+            const latestFile = allHtmlFiles[0];
+            lineageHtmlPath = path.relative(__dirname, latestFile.path).replace(/\\/g, '/');
+            console.log('[API 서버] 파일 검색으로 리니지 HTML 파일 찾음:', lineageHtmlPath);
+            console.log('[API 서버] 찾은 파일 목록:', allHtmlFiles.map(f => ({ name: f.name, time: new Date(f.time).toISOString() })));
+          } else {
+            console.log('[API 서버] 리니지 HTML 파일을 찾을 수 없습니다.');
+            console.log('[API 서버] 검색한 디렉토리:', searchDirs.map(d => ({ dir: d, exists: fs.existsSync(d) })));
+          }
+        }
+        
+        // 리포트 객체 생성 (lineageHtmlPath가 null이어도 포함)
+        // lineageHtmlPath가 있으면 API 서버를 통해 접근할 수 있도록 URL 변환
+        let finalLineageHtmlPath = null;
+        if (lineageHtmlPath) {
+          finalLineageHtmlPath = `/api/lineage/${lineageHtmlPath}`;
+          console.log('[API 서버] 리니지 경로 변환:', {
+            원본: lineageHtmlPath,
+            변환: finalLineageHtmlPath
+          });
+        } else {
+          console.warn('[API 서버] lineageHtmlPath가 null입니다. 파일을 찾지 못했습니다.');
+        }
+        
+        const reportData = {
+          json: analysisResult,
+          markdown: markdownContent,
+          lineageHtmlPath: finalLineageHtmlPath  // 항상 포함 (null이어도)
+        };
+        
+        console.log('[API 서버] 리포트 객체 생성:', {
+          reportKeys: Object.keys(reportData),
+          hasLineageHtmlPath: reportData.hasOwnProperty('lineageHtmlPath'),
+          lineageHtmlPath: reportData.lineageHtmlPath,
+          lineageHtmlPathType: typeof reportData.lineageHtmlPath
+        });
+        
+        const responseData = {
+          success: true,
+          result: {
+            structure: analysisResult.structure,
+            performance: analysisResult.performance,
+            complexity: analysisResult.complexity,
+            security: analysisResult.security,
+            optimization: analysisResult.optimization,
+            lineage: analysisResult.lineage || null
+          },
+          report: reportData
+        };
+        
+        // 디버깅: 응답 데이터 확인
+        console.log('[API 서버] 최종 응답 데이터 확인:', {
+          hasLineage: !!responseData.result.lineage,
+          joinRelationshipsCount: responseData.result.lineage?.join_relationships?.length || 0,
+          reportKeys: Object.keys(responseData.report),
+          hasLineageHtmlPath: responseData.report.hasOwnProperty('lineageHtmlPath'),
+          lineageHtmlPath: responseData.report.lineageHtmlPath,
+          lineageHtmlPathType: typeof responseData.report.lineageHtmlPath,
+          reportStringified: JSON.stringify(responseData.report).substring(0, 200)
+        });
+        
+        return sendJSON(res, 200, responseData);
+        
+      } catch (error) {
+        console.error('[API 서버] SQL 쿼리 분석 오류:', error);
+        console.error('[API 서버] 오류 스택:', error.stack);
+        
+        // 응답이 이미 전송되었는지 확인
+        if (res.headersSent) {
+          console.error('[API 서버] 응답이 이미 전송되었습니다. 추가 응답 불가.');
+          return;
+        }
+        
+        // 에러 타입에 따른 처리
+        let errorMessage = `쿼리 분석 중 오류가 발생했습니다: ${error.message}`;
+        let statusCode = 500;
+        
+        if (error.message.includes('ENOENT') || error.message.includes('파일을 찾을 수 없습니다')) {
+          statusCode = 404;
+          errorMessage = `SQL 파일을 찾을 수 없습니다: ${error.message}`;
+        } else if (error.message.includes('timeout') || error.message.includes('타임아웃') || error.code === 'TIMEOUT') {
+          statusCode = 504;
+          errorMessage = '쿼리 분석 타임아웃: 분석에 시간이 너무 오래 걸립니다. (5분 초과)';
+        } else if (error.message.includes('ENOBUFS') || error.message.includes('maxBuffer')) {
+          statusCode = 413;
+          errorMessage = '분석 결과가 너무 큽니다. 쿼리를 더 작은 단위로 분할해주세요.';
+        }
+        
+        return sendJSON(res, statusCode, {
+          success: false,
+          error: errorMessage,
+          errorType: error.name || 'UnknownError',
+          suggestion: statusCode === 504 ? '쿼리를 더 작은 단위로 분할하거나 복잡도를 줄여주세요.' : 
+                     statusCode === 413 ? '큰 쿼리는 여러 개의 작은 쿼리로 나누어 분석하세요.' : 
+                     '서버 로그를 확인하거나 관리자에게 문의하세요.'
+        });
+      }
+    });
+    return; // 요청 처리 완료
+  }
+  
+  // 영향도 분석 API
+  // 엔드포인트: POST /api/sql/impact-analysis
+  // 기능: 특정 테이블/컬럼에 이슈 발생 시 영향받는 쿼리 분석
+  else if ((req.url === '/api/sql/impact-analysis' || req.url.startsWith('/api/sql/impact-analysis')) && req.method === 'POST') {
+    console.log('[API 서버] 영향도 분석 요청 수신:', req.url, req.method);
+    
+    // 요청 타임아웃 설정 (2분)
+    req.setTimeout(120000, () => {
+      if (!res.headersSent) {
+        console.error('[API 서버] 영향도 분석 요청 타임아웃 (2분 초과)');
+        res.writeHead(504, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ 
+          success: false,
+          error: '요청 타임아웃: 영향도 분석에 시간이 너무 오래 걸립니다. (2분 초과)'
+        }));
+      }
+    });
+    
+    let body = '';
+    const maxBodySize = 10 * 1024 * 1024; // 10MB 제한
+    let bodySize = 0;
+    
+    req.on('data', chunk => {
+      bodySize += chunk.length;
+      if (bodySize > maxBodySize) {
+        console.error('[API 서버] 요청 본문 크기 초과:', bodySize);
+        res.writeHead(413, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ 
+          success: false,
+          error: '요청 본문이 너무 큽니다. (10MB 초과)'
+        }));
+        return;
+      }
+      body += chunk.toString('utf-8');
+    });
+    
+    req.on('end', async () => {
+      try {
+        const requestData = JSON.parse(body);
+        const { query_file, query_text, target_table, target_column } = requestData;
+        
+        console.log('[API 서버] 영향도 분석 요청');
+        console.log('[API 서버] 요청 데이터:', { query_file, has_query_text: !!query_text, target_table, target_column });
+        
+        if (!target_table) {
+          return sendJSON(res, 400, {
+            success: false,
+            error: '분석 대상 테이블명을 제공해야 합니다.'
+          });
+        }
+        
+        if (!query_file && !query_text) {
+          return sendJSON(res, 400, {
+            success: false,
+            error: 'SQL 쿼리 또는 파일 경로를 제공해야 합니다.'
+          });
+        }
+        
+        // SQL 쿼리 읽기
+        const fs = await import('fs');
+        const path = await import('path');
+        let sqlContent = '';
+        
+        if (query_text) {
+          sqlContent = query_text;
+        } else if (query_file) {
+          let filePath = query_file;
+          if (!path.isAbsolute(query_file)) {
+            filePath = join(__dirname, query_file);
+          }
+          
+          if (!fs.existsSync(filePath)) {
+            return sendJSON(res, 400, {
+              success: false,
+              error: `SQL 파일을 찾을 수 없습니다: ${query_file}`
+            });
+          }
+          
+          sqlContent = fs.readFileSync(filePath, 'utf-8');
+        }
+        
+        // Python 스크립트 실행을 위한 명령어 구성 (영향도 분석 모드)
+        const pythonScript = join(__dirname, 'test-sql-query-analyzer.py');
+        
+        // 임시 SQL 파일 생성
+        const tempFile = join(__dirname, 'temp_impact_query_' + Date.now() + '.sql');
+        fs.writeFileSync(tempFile, sqlContent, 'utf-8');
+        
+        // 영향도 분석 모드로 실행
+        let command = `python "${pythonScript}" --impact "${tempFile}" "${target_table}"`;
+        if (target_column) {
+          command += ` "${target_column}"`;
+        }
+        
+        console.log('[API 서버] 실행 명령어:', command);
+        console.log('[API 서버] 영향도 분석 시작 (타겟 테이블:', target_table, ', 컬럼:', target_column || '전체', ')');
+        
+        const startTime = Date.now();
+        let stdout, stderr;
+        
+        try {
+          const result = await execAsync(command, {
+            cwd: __dirname,
+            maxBuffer: 50 * 1024 * 1024,
+            timeout: 120000
+          });
+          stdout = result.stdout;
+          stderr = result.stderr;
+        } catch (execError) {
+          stdout = execError.stdout || '';
+          stderr = execError.stderr || execError.message || '';
+          console.error('[API 서버] Python 스크립트 실행 오류:', execError.message);
+          console.error('[API 서버] stderr:', stderr.substring(0, 1000));
+          
+          // 임시 파일 삭제
+          try {
+            if (fs.existsSync(tempFile)) {
+              fs.unlinkSync(tempFile);
+            }
+          } catch (e) {}
+          
+          return sendJSON(res, 500, {
+            success: false,
+            error: `Python 스크립트 실행 오류: ${execError.message}`,
+            stderr: stderr.substring(0, 1000)
+          });
+        }
+        
+        const elapsedTime = ((Date.now() - startTime) / 1000).toFixed(2);
+        console.log(`[API 서버] Python 스크립트 실행 완료 (소요 시간: ${elapsedTime}초)`);
+        console.log('[API 서버] stdout:', stdout.substring(0, 500));
+        
+        // 임시 파일 삭제
+        try {
+          if (fs.existsSync(tempFile)) {
+            fs.unlinkSync(tempFile);
+          }
+        } catch (e) {}
+        
+        // JSON 결과 파싱
+        try {
+          const impactResult = JSON.parse(stdout.trim());
+          
+          if (!impactResult.success) {
+            return sendJSON(res, 500, {
+              success: false,
+              error: impactResult.error || '영향도 분석 실패'
+            });
+          }
+          
+          return sendJSON(res, 200, {
+            success: true,
+            impact_analysis: impactResult.impact_analysis
+          });
+        } catch (parseError) {
+          console.error('[API 서버] JSON 파싱 오류:', parseError.message);
+          console.error('[API 서버] stdout:', stdout);
+          
+          return sendJSON(res, 500, {
+            success: false,
+            error: '영향도 분석 결과 파싱 오류',
+            stdout: stdout.substring(0, 2000),
+            stderr: stderr.substring(0, 1000)
+          });
+        }
+        
+      } catch (error) {
+        console.error('[API 서버] 영향도 분석 오류:', error);
+        console.error('[API 서버] 오류 스택:', error.stack);
+        
+        if (res.headersSent) {
+          console.error('[API 서버] 응답이 이미 전송되었습니다.');
+          return;
+        }
+        
+        return sendJSON(res, 500, {
+          success: false,
+          error: `영향도 분석 중 오류가 발생했습니다: ${error.message}`,
+          errorType: error.name || 'UnknownError'
+        });
+      }
+    });
+    return;
   } else {
     // 알 수 없는 경로에 대한 404 응답
     console.log('[API 서버] 404 Not Found:', req.method, req.url);

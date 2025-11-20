@@ -494,7 +494,7 @@ ports:
 ## 📚 관련 문서
 
 - [`README.md`](../README.md) - 프로젝트 개요
-- [`가이드.md`](../가이드.md) - 프로젝트 완전 가이드
+- [`프로젝트_완전_가이드.md`](../프로젝트_완전_가이드.md) - 프로젝트 완전 가이드
 - [Docker 공식 문서](https://docs.docker.com/)
 - [Docker Compose 공식 문서](https://docs.docker.com/compose/)
 

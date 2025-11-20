@@ -1229,6 +1229,279 @@
           }
         }
       }
+    },
+    "/api/sql/analyze": {
+      "post": {
+        "summary": "SQL 쿼리 분석",
+        "description": "PostgreSQL 쿼리를 분석하여 구조, 성능, 복잡도, 보안을 평가하고 최적화 제안을 제공합니다. MCP SQL 쿼리 분석 서버를 통해 분석을 수행합니다.",
+        "operationId": "analyzeSQLQuery",
+        "tags": ["SQL Analysis"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "query_file": {
+                    "type": "string",
+                    "description": "SQL 파일 경로 (선택사항, query_text와 둘 중 하나는 필수)",
+                    "example": "queries/complex_query.sql"
+                  },
+                  "query_text": {
+                    "type": "string",
+                    "description": "SQL 쿼리 텍스트 (선택사항, query_file과 둘 중 하나는 필수)",
+                    "example": "SELECT * FROM users WHERE id = 1;"
+                  },
+                  "output_format": {
+                    "type": "string",
+                    "enum": ["json", "markdown", "both"],
+                    "default": "both",
+                    "description": "출력 형식",
+                    "example": "both"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "분석 성공",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "result": {
+                      "type": "object",
+                      "properties": {
+                        "structure": {
+                          "type": "object",
+                          "description": "쿼리 구조 분석 결과",
+                          "properties": {
+                            "query_type": {
+                              "type": "string",
+                              "example": "SELECT"
+                            },
+                            "table_count": {
+                              "type": "integer",
+                              "example": 3
+                            },
+                            "column_count": {
+                              "type": "integer",
+                              "example": 10
+                            },
+                            "join_count": {
+                              "type": "integer",
+                              "example": 2
+                            },
+                            "subquery_count": {
+                              "type": "integer",
+                              "example": 1
+                            },
+                            "max_subquery_depth": {
+                              "type": "integer",
+                              "example": 2
+                            },
+                            "query_length": {
+                              "type": "integer",
+                              "example": 500
+                            },
+                            "query_lines": {
+                              "type": "integer",
+                              "example": 20
+                            }
+                          }
+                        },
+                        "performance": {
+                          "type": "object",
+                          "description": "성능 분석 결과",
+                          "properties": {
+                            "score": {
+                              "type": "integer",
+                              "description": "성능 점수 (0-100)",
+                              "example": 75
+                            },
+                            "level": {
+                              "type": "string",
+                              "enum": ["excellent", "good", "medium", "low"],
+                              "example": "good"
+                            },
+                            "issues": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "type": {
+                                    "type": "string",
+                                    "example": "missing_index"
+                                  },
+                                  "severity": {
+                                    "type": "string",
+                                    "enum": ["high", "medium", "low"],
+                                    "example": "medium"
+                                  },
+                                  "message": {
+                                    "type": "string",
+                                    "example": "인덱스가 없는 컬럼에 대한 필터링이 감지되었습니다."
+                                  },
+                                  "impact": {
+                                    "type": "string",
+                                    "example": "전체 테이블 스캔 발생 가능"
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        },
+                        "complexity": {
+                          "type": "object",
+                          "description": "복잡도 분석 결과",
+                          "properties": {
+                            "score": {
+                              "type": "integer",
+                              "description": "복잡도 점수 (0-100, 높을수록 복잡)",
+                              "example": 60
+                            },
+                            "level": {
+                              "type": "string",
+                              "enum": ["very_high", "high", "medium", "low"],
+                              "example": "medium"
+                            },
+                            "nesting_depth": {
+                              "type": "integer",
+                              "example": 3
+                            }
+                          }
+                        },
+                        "security": {
+                          "type": "object",
+                          "description": "보안 분석 결과",
+                          "properties": {
+                            "score": {
+                              "type": "integer",
+                              "description": "보안 점수 (0-100)",
+                              "example": 85
+                            },
+                            "level": {
+                              "type": "string",
+                              "enum": ["excellent", "good", "medium", "low"],
+                              "example": "good"
+                            },
+                            "vulnerabilities": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "type": {
+                                    "type": "string",
+                                    "example": "sql_injection"
+                                  },
+                                  "severity": {
+                                    "type": "string",
+                                    "enum": ["critical", "high", "medium", "low"],
+                                    "example": "high"
+                                  },
+                                  "message": {
+                                    "type": "string",
+                                    "example": "SQL Injection 취약점이 감지되었습니다."
+                                  },
+                                  "impact": {
+                                    "type": "string",
+                                    "example": "데이터베이스 무단 접근 가능"
+                                  },
+                                  "recommendation": {
+                                    "type": "string",
+                                    "example": "파라미터화된 쿼리 사용 권장"
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        },
+                        "optimization": {
+                          "type": "object",
+                          "description": "최적화 제안",
+                          "properties": {
+                            "suggestions": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "type": {
+                                    "type": "string",
+                                    "example": "index_optimization"
+                                  },
+                                  "priority": {
+                                    "type": "string",
+                                    "enum": ["high", "medium", "low"],
+                                    "example": "high"
+                                  },
+                                  "message": {
+                                    "type": "string",
+                                    "example": "WHERE 절에 사용된 컬럼에 인덱스 추가 권장"
+                                  },
+                                  "example": {
+                                    "type": "string",
+                                    "example": "CREATE INDEX idx_user_id ON users(id);"
+                                  },
+                                  "expected_improvement": {
+                                    "type": "string",
+                                    "example": "쿼리 실행 시간 50% 감소 예상"
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "report": {
+                      "type": "object",
+                      "description": "분석 리포트",
+                      "properties": {
+                        "json": {
+                          "type": "object",
+                          "description": "JSON 형식 리포트"
+                        },
+                        "markdown": {
+                          "type": "string",
+                          "description": "마크다운 형식 리포트"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "잘못된 요청 (쿼리 또는 파일 경로가 제공되지 않음)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "서버 오류",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {

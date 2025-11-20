@@ -282,7 +282,7 @@ https://github.com/hwangjungyong/test02/blob/커밋해시/파일명.md
 
 **메인 가이드:**
 ```
-https://github.com/hwangjungyong/test02/blob/main/가이드.md
+https://github.com/hwangjungyong/test02/blob/main/프로젝트_완전_가이드.md
 ```
 
 **README:**

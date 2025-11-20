@@ -1,0 +1,359 @@
+{
+  "current_result": {
+    "analysis_method": "static_analysis",
+    "structure": {
+      "query_type": "UNKNOWN",
+      "table_count": 0,
+      "tables": [],
+      "column_count": 0,
+      "join_count": 9,
+      "join_types": [
+        "LEFT JOIN",
+        "LEFT JOIN",
+        "LEFT JOIN",
+        "LEFT JOIN",
+        "INNER JOIN",
+        "LEFT JOIN",
+        "LEFT JOIN",
+        "LEFT JOIN",
+        "INNER JOIN"
+      ],
+      "subquery_count": 0,
+      "max_subquery_depth": 0,
+      "where_clause_count": 7,
+      "group_by_count": 0,
+      "order_by_count": 0,
+      "cte_count": 0,
+      "query_length": 16201,
+      "query_lines": 467
+    },
+    "performance": {
+      "score": 28,
+      "level": "HIGH",
+      "issues": [
+        {
+          "type": "FUNCTION_IN_WHERE",
+          "severity": "MEDIUM",
+          "message": "WHERE 절에서 함수 사용: u . createdAt >= date ( 'now' , '-1 year' ) GROUP ...",
+          "impact": "인덱스 사용 불가능"
+        },
+        {
+          "type": "FUNCTION_IN_WHERE",
+          "severity": "MEDIUM",
+          "message": "WHERE 절에서 함수 사용: n2 . category = cns . category AND n2 . publishedD...",
+          "impact": "인덱스 사용 불가능"
+        },
+        {
+          "type": "FUNCTION_IN_WHERE",
+          "severity": "MEDIUM",
+          "message": "WHERE 절에서 함수 사용: rs2 . artist = ars . artist AND rs2 . lastPlayed >...",
+          "impact": "인덱스 사용 불가능"
+        },
+        {
+          "type": "FUNCTION_IN_WHERE",
+          "severity": "MEDIUM",
+          "message": "WHERE 절에서 함수 사용: n2 . category = n . category AND n2 . publishedDat...",
+          "impact": "인덱스 사용 불가능"
+        },
+        {
+          "type": "FUNCTION_IN_WHERE",
+          "severity": "MEDIUM",
+          "message": "WHERE 절에서 함수 사용: rs2 . artist = rs . artist AND rs2 . lastPlayed >=...",
+          "impact": "인덱스 사용 불가능"
+        },
+        {
+          "type": "FUNCTION_IN_WHERE",
+          "severity": "MEDIUM",
+          "message": "WHERE 절에서 함수 사용: u . createdAt >= date ( 'now' , '-1 year' ) GROUP ...",
+          "impact": "인덱스 사용 불가능"
+        },
+        {
+          "type": "FUNCTION_IN_WHERE",
+          "severity": "MEDIUM",
+          "message": "WHERE 절에서 함수 사용: n . collectedAt >= date ( 'now' , '-6 months' ) GR...",
+          "impact": "인덱스 사용 불가능"
+        },
+        {
+          "type": "TOO_MANY_DISTINCT",
+          "severity": "MEDIUM",
+          "message": "과도한 DISTINCT 사용 (26회)",
+          "impact": "성능 저하"
+        },
+        {
+          "type": "FUNCTION_USAGE",
+          "severity": "MEDIUM",
+          "message": "CAST 함수 다수 사용 (7회)",
+          "impact": "인덱스 사용 불가능 가능성"
+        }
+      ],
+      "recommendations": [
+        {
+          "type": "INDEX",
+          "priority": "MEDIUM",
+          "message": "함수 사용을 피하고 컬럼 자체를 사용하도록 쿼리 수정"
+        },
+        {
+          "type": "INDEX",
+          "priority": "MEDIUM",
+          "message": "함수 사용을 피하고 컬럼 자체를 사용하도록 쿼리 수정"
+        },
+        {
+          "type": "INDEX",
+          "priority": "MEDIUM",
+          "message": "함수 사용을 피하고 컬럼 자체를 사용하도록 쿼리 수정"
+        },
+        {
+          "type": "INDEX",
+          "priority": "MEDIUM",
+          "message": "함수 사용을 피하고 컬럼 자체를 사용하도록 쿼리 수정"
+        },
+        {
+          "type": "INDEX",
+          "priority": "MEDIUM",
+          "message": "함수 사용을 피하고 컬럼 자체를 사용하도록 쿼리 수정"
+        },
+        {
+          "type": "INDEX",
+          "priority": "MEDIUM",
+          "message": "함수 사용을 피하고 컬럼 자체를 사용하도록 쿼리 수정"
+        },
+        {
+          "type": "INDEX",
+          "priority": "MEDIUM",
+          "message": "함수 사용을 피하고 컬럼 자체를 사용하도록 쿼리 수정"
+        }
+      ]
+    },
+    "complexity": {
+      "score": 10,
+      "level": "LOW",
+      "metrics": {
+        "query_length": 16201,
+        "query_lines": 467,
+        "table_count": 0,
+        "join_count": 9,
+        "subquery_count": 0,
+        "max_subquery_depth": 0,
+        "where_clause_count": 7,
+        "column_count": 0,
+        "group_by_count": 0,
+        "order_by_count": 0,
+        "cte_count": 0,
+        "union_count": 0
+      }
+    },
+    "security": {
+      "score": 100,
+      "level": "SAFE",
+      "vulnerabilities": []
+    },
+    "optimization": {
+      "suggestions": [
+        {
+          "type": "INDEX",
+          "priority": "HIGH",
+          "message": "WHERE 절 컬럼에 인덱스 추가 고려: lastPlayed, category, artist, createdAt, collectedAt",
+          "example": "CREATE INDEX idx_name ON table_name (lastPlayed, category, artist);",
+          "expected_improvement": "30-50%"
+        },
+        {
+          "type": "INDEX",
+          "priority": "HIGH",
+          "message": "JOIN 조건 컬럼에 인덱스 추가 고려: id, user_id",
+          "example": "CREATE INDEX idx_join ON table_name (id, user_id);",
+          "expected_improvement": "40-60%"
+        },
+        {
+          "type": "QUERY_REFACTOR",
+          "priority": "MEDIUM",
+          "message": "DISTINCT 사용(26회) 최소화 고려",
+          "example": "GROUP BY를 사용하여 DISTINCT 대체 가능 여부 검토",
+          "expected_improvement": "15-30%"
+        },
+        {
+          "type": "JOIN_OPTIMIZATION",
+          "priority": "MEDIUM",
+          "message": "다중 JOIN(9개) 순서 최적화 고려: 작은 테이블을 먼저 JOIN",
+          "example": "작은 테이블을 FROM 절에 배치하고 큰 테이블을 나중에 JOIN",
+          "expected_improvement": "10-25%"
+        },
+        {
+          "type": "CONDITION_OPTIMIZATION",
+          "priority": "LOW",
+          "message": "WHERE 절 조건 순서 최적화: 인덱스 사용 가능한 조건을 앞에 배치",
+          "example": "WHERE indexed_column = value AND function(column) = value",
+          "expected_improvement": "5-15%"
+        },
+        {
+          "type": "AGGREGATION_OPTIMIZATION",
+          "priority": "LOW",
+          "message": "HAVING 절의 조건 중 WHERE 절로 이동 가능한 것 검토",
+          "example": "집계 함수를 사용하지 않는 조건은 WHERE 절로 이동",
+          "expected_improvement": "5-15%"
+        }
+      ],
+      "total_count": 6,
+      "high_priority_count": 2,
+      "medium_priority_count": 2,
+      "low_priority_count": 2
+    },
+    "lineage": {
+      "tables": [],
+      "ctes": [],
+      "join_relationships": [
+        {
+          "left_table": "unknown",
+          "right_table": "news",
+          "join_type": "LEFT JOIN",
+          "condition": "u . id = n . userId"
+        },
+        {
+          "left_table": "news",
+          "right_table": "radioSongs",
+          "join_type": "LEFT JOIN",
+          "condition": "u . id = rs . userId"
+        },
+        {
+          "left_table": "radioSongs",
+          "right_table": "apiKeys",
+          "join_type": "LEFT JOIN",
+          "condition": "u . id = ak . userId"
+        },
+        {
+          "left_table": "apiKeys",
+          "right_table": "apiKeyUsage",
+          "join_type": "LEFT JOIN",
+          "condition": "ak . id = aku . apiKeyId"
+        },
+        {
+          "left_table": "apiKeyUsage",
+          "right_table": "news",
+          "join_type": "INNER JOIN",
+          "condition": "u . id = n . userId"
+        },
+        {
+          "left_table": "news",
+          "right_table": "user_radio_stats",
+          "join_type": "LEFT JOIN",
+          "condition": "uns . user_id = urs . user_id"
+        },
+        {
+          "left_table": "user_radio_stats",
+          "right_table": "user_api_stats",
+          "join_type": "LEFT JOIN",
+          "condition": "uns . user_id = uas . user_id"
+        },
+        {
+          "left_table": "user_api_stats",
+          "right_table": "news",
+          "join_type": "LEFT JOIN",
+          "condition": "u . id = n . userId"
+        },
+        {
+          "left_table": "news",
+          "right_table": "news",
+          "join_type": "INNER JOIN",
+          "condition": "u . id = n . userId"
+        }
+      ],
+      "cte_dependencies": [],
+      "subquery_relationships": []
+    },
+    "metadata": {
+      "query_length": 16201,
+      "query_lines": 467,
+      "query_type": "UNKNOWN",
+      "table_count": 0,
+      "join_count": 0,
+      "subquery_count": 0
+    }
+  },
+  "postgresql_result": {
+    "analysis_method": "postgresql_explain_analyze",
+    "note": "실제 PostgreSQL 데이터베이스 연결이 필요합니다.",
+    "simulation": true,
+    "explain_plan": {
+      "note": "EXPLAIN ANALYZE 결과는 실제 데이터베이스에서 실행해야 합니다.",
+      "example_command": "EXPLAIN (ANALYZE, BUFFERS, VERBOSE) <쿼리>",
+      "expected_output": [
+        "실행 계획 트리",
+        "각 연산자의 비용",
+        "실제 실행 시간",
+        "처리된 행 수",
+        "인덱스 사용 여부",
+        "조인 방식 (Nested Loop, Hash Join 등)"
+      ]
+    },
+    "comparison_note": "현재 구현은 정적 분석만 수행하므로 실제 실행 계획과 비교가 필요합니다."
+  },
+  "comparison": {
+    "comparison_date": "2025-11-20T10:31:11.562612",
+    "current_implementation": {
+      "method": "정적 분석 (Static Analysis)",
+      "tools": [
+        "sqlparse"
+      ],
+      "strengths": [
+        "데이터베이스 연결 불필요",
+        "빠른 분석 속도",
+        "쿼리 구조 분석",
+        "패턴 기반 성능 분석",
+        "보안 취약점 감지"
+      ],
+      "limitations": [
+        "실제 실행 계획 없음",
+        "실제 성능 측정 불가",
+        "인덱스 사용 여부 추정만 가능",
+        "비용 계산 없음"
+      ]
+    },
+    "postgresql_explain": {
+      "method": "동적 분석 (Dynamic Analysis)",
+      "tools": [
+        "PostgreSQL EXPLAIN ANALYZE"
+      ],
+      "strengths": [
+        "실제 실행 계획 제공",
+        "정확한 비용 계산",
+        "실제 실행 시간 측정",
+        "인덱스 사용 여부 확인",
+        "조인 방식 분석"
+      ],
+      "limitations": [
+        "데이터베이스 연결 필요",
+        "실제 쿼리 실행 필요",
+        "데이터가 있어야 함"
+      ]
+    },
+    "recommendations": [
+      {
+        "priority": "HIGH",
+        "title": "하이브리드 분석 방식 도입",
+        "description": "정적 분석 + 동적 분석을 결합하여 더 정확한 분석 제공",
+        "action": "PostgreSQL 연결 옵션 추가 및 EXPLAIN ANALYZE 결과 통합"
+      },
+      {
+        "priority": "MEDIUM",
+        "title": "실행 요약 추가",
+        "description": "실제 실행 시간, 비용, 처리된 행 수 정보 제공",
+        "action": "EXPLAIN ANALYZE 결과 파싱 및 통합"
+      },
+      {
+        "priority": "MEDIUM",
+        "title": "인덱스 사용 여부 확인",
+        "description": "실제 인덱스 사용 여부를 확인하여 더 정확한 성능 분석",
+        "action": "PostgreSQL pg_indexes 시스템 테이블 조회"
+      }
+    ],
+    "current_analysis_summary": {
+      "performance_score": 28,
+      "performance_level": "HIGH",
+      "complexity_score": 10,
+      "complexity_level": "LOW",
+      "security_score": 100,
+      "security_level": "SAFE",
+      "total_issues": 9,
+      "optimization_suggestions": 6
+    }
+  }
+}

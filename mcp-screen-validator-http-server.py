@@ -41,13 +41,46 @@ def get_browser_lock():
     global _browser_lock
     if _browser_lock is None:
         try:
+            # 현재 이벤트 루프 확인
+            try:
+                loop = asyncio.get_running_loop()
+            except RuntimeError:
+                # 실행 중인 이벤트 루프가 없으면 새로 생성
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
             _browser_lock = asyncio.Lock()
-        except RuntimeError:
-            # 이벤트 루프가 없으면 새로 생성
+        except Exception:
+            # 실패 시 새 이벤트 루프 생성
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
             _browser_lock = asyncio.Lock()
     return _browser_lock
+
+def run_async_safely(coro, timeout=120.0):
+    """안전하게 비동기 함수를 실행합니다."""
+    try:
+        # 실행 중인 이벤트 루프 확인
+        loop = asyncio.get_running_loop()
+        # 이미 실행 중인 루프가 있으면 새 스레드에서 실행
+        import concurrent.futures
+        import threading
+        
+        def run_in_thread():
+            new_loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(new_loop)
+            try:
+                return new_loop.run_until_complete(
+                    asyncio.wait_for(coro, timeout=timeout)
+                )
+            finally:
+                new_loop.close()
+        
+        with concurrent.futures.ThreadPoolExecutor() as executor:
+            future = executor.submit(run_in_thread)
+            return future.result(timeout=timeout + 10)
+    except RuntimeError:
+        # 실행 중인 루프가 없으면 직접 실행
+        return asyncio.run(asyncio.wait_for(coro, timeout=timeout))
 
 async def get_browser() -> Browser:
     """브라우저 인스턴스를 가져오거나 생성합니다."""
@@ -545,13 +578,38 @@ class ScreenValidationHandler(BaseHTTPRequestHandler):
         self.send_header('Access-Control-Allow-Origin', '*')
         self.send_header('Access-Control-Allow-Methods', 'POST, OPTIONS')
         self.send_header('Access-Control-Allow-Headers', 'Content-Type')
+        self.send_header('Access-Control-Max-Age', '86400')
         self.end_headers()
+    
+    def do_GET(self):
+        """GET 요청 처리 (헬스체크 등)"""
+        if self.path == '/health' or self.path == '/':
+            response = json.dumps({
+                "status": "ok",
+                "service": "screen-validator-http-server",
+                "port": 3002
+            }, ensure_ascii=False)
+            
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json; charset=utf-8')
+            self.send_header('Access-Control-Allow-Origin', '*')
+            self.end_headers()
+            self.wfile.write(response.encode('utf-8'))
+        else:
+            self.send_response(404)
+            self.send_header('Content-Type', 'application/json; charset=utf-8')
+            self.end_headers()
+            self.wfile.write(json.dumps({"error": "Not Found"}).encode('utf-8'))
     
     def do_POST(self):
         """POST 요청 처리"""
+        response_sent = False
         try:
             # 요청 본문 읽기
             content_length = int(self.headers.get('Content-Length', 0))
+            if content_length == 0:
+                raise ValueError("Content-Length가 0입니다.")
+            
             post_data = self.rfile.read(content_length)
             data = json.loads(post_data.decode('utf-8'))
             
@@ -564,36 +622,132 @@ class ScreenValidationHandler(BaseHTTPRequestHandler):
                     "success": False,
                     "error": "URL이 필요합니다."
                 }, ensure_ascii=False)
+                response_sent = True
             else:
-                # 경로에 따라 처리
-                if self.path == '/api/screen/validate':
-                    result = asyncio.run(validate_screen(url, selector, expected_value))
-                    response = json.dumps(result, ensure_ascii=False)
-                
-                elif self.path == '/api/screen/capture':
-                    result = asyncio.run(capture_screen_only(url, selector))
-                    response = json.dumps(result, ensure_ascii=False)
-                
-                elif self.path == '/api/screen/interact':
-                    actions = data.get('actions', [])
-                    result_selector = data.get('resultSelector')
-                    wait_after_actions = data.get('waitAfterActions', 2000)
-                    result = asyncio.run(interact_and_get_result(url, actions, result_selector, wait_after_actions))
-                    response = json.dumps(result, ensure_ascii=False)
-                
-                else:
+                # 경로에 따라 처리 (타임아웃 설정)
+                try:
+                    if self.path == '/api/screen/validate':
+                        print(f"[화면 검증 서버] 검증 요청: {url}", file=sys.stderr)
+                        try:
+                            result = run_async_safely(
+                                validate_screen(url, selector, expected_value),
+                                timeout=120.0
+                            )
+                            response = json.dumps(result, ensure_ascii=False)
+                        except Exception as func_error:
+                            error_msg = f"화면 검증 중 오류 발생: {str(func_error)}"
+                            print(f"[화면 검증 서버] 함수 실행 오류: {error_msg}", file=sys.stderr)
+                            import traceback
+                            print(f"[화면 검증 서버] 상세:\n{traceback.format_exc()}", file=sys.stderr)
+                            response = json.dumps({
+                                "success": False,
+                                "error": error_msg,
+                                "errorType": type(func_error).__name__
+                            }, ensure_ascii=False)
+                    
+                    elif self.path == '/api/screen/capture':
+                        print(f"[화면 검증 서버] 캡처 요청: {url}", file=sys.stderr)
+                        try:
+                            result = run_async_safely(
+                                capture_screen_only(url, selector),
+                                timeout=120.0
+                            )
+                            response = json.dumps(result, ensure_ascii=False)
+                        except Exception as func_error:
+                            error_msg = f"화면 캡처 중 오류 발생: {str(func_error)}"
+                            print(f"[화면 검증 서버] 함수 실행 오류: {error_msg}", file=sys.stderr)
+                            import traceback
+                            print(f"[화면 검증 서버] 상세:\n{traceback.format_exc()}", file=sys.stderr)
+                            response = json.dumps({
+                                "success": False,
+                                "error": error_msg,
+                                "errorType": type(func_error).__name__
+                            }, ensure_ascii=False)
+                    
+                    elif self.path == '/api/screen/interact':
+                        actions = data.get('actions', [])
+                        result_selector = data.get('resultSelector')
+                        wait_after_actions = data.get('waitAfterActions', 2000)
+                        print(f"[화면 검증 서버] 상호작용 요청: {url}", file=sys.stderr)
+                        try:
+                            result = run_async_safely(
+                                interact_and_get_result(url, actions, result_selector, wait_after_actions),
+                                timeout=120.0
+                            )
+                            response = json.dumps(result, ensure_ascii=False)
+                        except Exception as func_error:
+                            error_msg = f"상호작용 중 오류 발생: {str(func_error)}"
+                            print(f"[화면 검증 서버] 함수 실행 오류: {error_msg}", file=sys.stderr)
+                            import traceback
+                            print(f"[화면 검증 서버] 상세:\n{traceback.format_exc()}", file=sys.stderr)
+                            response = json.dumps({
+                                "success": False,
+                                "error": error_msg,
+                                "errorType": type(func_error).__name__
+                            }, ensure_ascii=False)
+                    
+                    else:
+                        response = json.dumps({
+                            "success": False,
+                            "error": f"알 수 없는 경로: {self.path}"
+                        }, ensure_ascii=False)
+                    
+                    response_sent = True
+                    
+                except asyncio.TimeoutError:
+                    error_msg = "요청 처리 시간이 초과되었습니다. (120초)"
+                    print(f"[화면 검증 서버] 타임아웃: {error_msg}", file=sys.stderr)
                     response = json.dumps({
                         "success": False,
-                        "error": "알 수 없는 경로"
+                        "error": error_msg,
+                        "errorType": "TimeoutError"
                     }, ensure_ascii=False)
+                    response_sent = True
+                except Exception as inner_error:
+                    error_msg = f"요청 처리 중 예상치 못한 오류: {str(inner_error)}"
+                    print(f"[화면 검증 서버] 내부 오류: {error_msg}", file=sys.stderr)
+                    import traceback
+                    print(f"[화면 검증 서버] 상세:\n{traceback.format_exc()}", file=sys.stderr)
+                    response = json.dumps({
+                        "success": False,
+                        "error": error_msg,
+                        "errorType": type(inner_error).__name__
+                    }, ensure_ascii=False)
+                    response_sent = True
             
-            # CORS 헤더 설정
+            # CORS 헤더 설정 및 응답 전송
+            if not response_sent:
+                response = json.dumps({
+                    "success": False,
+                    "error": "응답을 생성하지 못했습니다."
+                }, ensure_ascii=False)
+            
             self.send_response(200)
             self.send_header('Content-Type', 'application/json; charset=utf-8')
             self.send_header('Access-Control-Allow-Origin', '*')
+            self.send_header('Access-Control-Allow-Methods', 'POST, OPTIONS')
+            self.send_header('Access-Control-Allow-Headers', 'Content-Type')
             self.end_headers()
             
             self.wfile.write(response.encode('utf-8'))
+            self.wfile.flush()
+            print(f"[화면 검증 서버] 응답 전송 완료: {self.path}", file=sys.stderr)
+        
+        except json.JSONDecodeError as e:
+            error_msg = f"JSON 파싱 오류: {str(e)}"
+            print(f"[화면 검증 서버] {error_msg}", file=sys.stderr)
+            error_response = json.dumps({
+                "success": False,
+                "error": error_msg,
+                "errorType": "JSONDecodeError"
+            }, ensure_ascii=False)
+            
+            self.send_response(400)
+            self.send_header('Content-Type', 'application/json; charset=utf-8')
+            self.send_header('Access-Control-Allow-Origin', '*')
+            self.end_headers()
+            self.wfile.write(error_response.encode('utf-8'))
+            self.wfile.flush()
         
         except Exception as e:
             error_msg = str(e)
@@ -612,11 +766,15 @@ class ScreenValidationHandler(BaseHTTPRequestHandler):
                 "errorType": error_type
             }, ensure_ascii=False)
             
-            self.send_response(500)
-            self.send_header('Content-Type', 'application/json; charset=utf-8')
-            self.send_header('Access-Control-Allow-Origin', '*')
-            self.end_headers()
-            self.wfile.write(error_response.encode('utf-8'))
+            try:
+                self.send_response(500)
+                self.send_header('Content-Type', 'application/json; charset=utf-8')
+                self.send_header('Access-Control-Allow-Origin', '*')
+                self.end_headers()
+                self.wfile.write(error_response.encode('utf-8'))
+                self.wfile.flush()
+            except Exception as send_error:
+                print(f"[화면 검증 서버] 응답 전송 실패: {send_error}", file=sys.stderr)
 
 def run_server(port=3002):
     """HTTP 서버 실행"""

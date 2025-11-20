@@ -686,7 +686,7 @@ docker-compose up -d
 1. 웹 UI에서 확인:
    - 웹사이트에 로그인
    - "사용자 관리하기" → "🐳 Docker 상태" 탭 클릭
-   - "실행 중인 컨테이너 (4개)"가 보일 거예요!
+- "실행 중인 컨테이너 (4개)"가 보일 거예요!
    - 각 가게의 상태를 확인할 수 있어요!
 
 2. 웹 브라우저에서 확인:
@@ -1237,6 +1237,110 @@ wsl --version
 - 업데이트 = 도구를 새 것으로 교체
 - 새 도구로 레고 집을 지을 수 있어요!
 
+### Q5: "Virtualization support not detected" 오류가 나요
+
+**오류 메시지:**
+```
+Virtualization support not detected
+Docker Desktop failed to start because virtualisation support wasn't detected.
+```
+
+**이게 무슨 뜻일까요?**
+
+**비유로 설명하면:**
+- Docker Desktop은 가상화 기능을 사용해서 가게(컨테이너)를 만들어요
+- 마치 레고 집을 지을 때 특별한 도구(가상화)가 필요한데, 그 도구가 꺼져있어요!
+- 컴퓨터의 가상화 기능이 비활성화되어 있어서 Docker가 작동하지 않아요!
+
+**가장 쉬운 해결 방법:**
+
+**1단계: Windows 기능에서 가상화 활성화하기**
+
+1. **Windows 시작 메뉴에서 "Windows 기능 켜기/끄기" 검색**
+2. **다음 항목들을 모두 체크하세요:**
+   - ✅ Windows 하이퍼바이저 플랫폼
+   - ✅ 가상 머신 플랫폼
+   - ✅ WSL (Windows Subsystem for Linux) - **이게 없다면 아래 방법으로 설치하세요!**
+3. **"확인" 버튼 클릭하고 컴퓨터 재시작**
+4. **Docker Desktop 다시 실행**
+
+**⚠️ 중요: WSL이 Windows 기능에 없다면?**
+
+**WSL이 Windows 기능 켜기/끄기에 보이지 않는 경우:**
+- Windows 10 Home 버전을 사용 중일 수 있어요
+- 또는 Windows 버전이 오래되었을 수 있어요
+- 이 경우 PowerShell 명령어로 설치해야 해요!
+
+**해결 방법: PowerShell로 WSL 설치하기**
+
+**방법 1: PowerShell 명령어로 설치 (가장 쉬운 방법)**
+
+1. **PowerShell을 관리자 권한으로 실행**
+   - Windows 시작 메뉴에서 "PowerShell" 검색
+   - 오른쪽 클릭 → "관리자 권한으로 실행" 선택
+
+2. **WSL 설치 명령어 실행**
+   ```powershell
+   wsl --install
+   ```
+   - 이 명령어를 입력하고 Enter 키 누르기
+   - WSL과 필요한 기능들이 자동으로 설치돼요!
+   - 시간: 약 5-10분 소요
+
+3. **컴퓨터 재시작**
+   - 설치가 완료되면 컴퓨터를 재시작해야 해요!
+   - 재시작 후 WSL이 설치되었어요!
+
+**방법 2: 수동으로 설치하기 (방법 1이 안 될 때)**
+
+1. **PowerShell을 관리자 권한으로 실행**
+
+2. **다음 명령어들을 순서대로 실행:**
+   ```powershell
+   # WSL 기능 활성화
+   dism.exe /online /enable-feature /featurename:Microsoft-Windows-Subsystem-Linux /all /norestart
+   
+   # 가상 머신 플랫폼 활성화
+   dism.exe /online /enable-feature /featurename:VirtualMachinePlatform /all /norestart
+   ```
+
+3. **컴퓨터 재시작**
+
+4. **WSL 2 커널 업데이트 패키지 다운로드 및 설치**
+   - https://aka.ms/wsl2kernel 접속
+   - "WSL2 Linux 커널 업데이트 패키지" 다운로드
+   - 다운로드한 파일 실행하여 설치
+
+5. **WSL 2를 기본 버전으로 설정**
+   ```powershell
+   wsl --set-default-version 2
+   ```
+
+**확인 방법:**
+```powershell
+wsl --status
+```
+- "기본 버전: 2"라고 나오면 성공! ✅
+
+**2단계: 가상화가 활성화되었는지 확인하기**
+
+**작업 관리자에서 확인:**
+1. `Ctrl + Shift + Esc` 키를 눌러 작업 관리자 열기
+2. "성능" 탭 클릭
+3. "CPU" 선택
+4. 오른쪽 아래에서 "가상화" 확인
+5. "사용"이라고 나오면 성공! ✅
+
+**만약 "사용 안 함"이라고 나오면:**
+- BIOS/UEFI에서 가상화를 활성화해야 해요
+- 자세한 내용은 [문제 해결 섹션](#문제-virtualization-support-not-detected-오류)을 참고하세요!
+
+**비유로 정리:**
+- 가상화 = 레고 집을 지을 때 필요한 특별한 도구
+- 도구가 꺼져있음 = 가상화 기능이 비활성화됨
+- 도구를 켜기 = Windows 기능에서 가상화 활성화
+- 도구를 켜면 레고 집을 지을 수 있어요!
+
 ---
 
 ## ⚠️ 문제 해결 (초등학생도 이해하는 설명)
@@ -1282,6 +1386,200 @@ error during connect: Get "http://...": open //./pipe/dockerDesktopLinuxEngine: 
 - Docker Desktop = 레고 상자를 여는 열쇠
 - 열쇠 없이는 레고 상자를 열 수 없어요!
 - 열쇠를 먼저 켜야(실행해야) 레고 집을 지을 수 있어요!
+
+---
+
+### 문제: "Virtualization support not detected" 오류
+
+**Docker Desktop에서 이런 오류가 나왔나요?**
+```
+Virtualization support not detected
+Docker Desktop failed to start because virtualisation support wasn't detected.
+```
+
+**이게 무슨 뜻일까요?**
+
+**비유로 설명하면:**
+- Docker Desktop은 가상화 기능을 사용해서 가게(컨테이너)를 만들어요
+- 마치 레고 집을 지을 때 특별한 도구(가상화)가 필요한데, 그 도구가 꺼져있어요!
+- 컴퓨터의 가상화 기능이 비활성화되어 있어서 Docker가 작동하지 않아요!
+
+**가상화가 뭔가요?**
+- 가상화는 컴퓨터 안에 또 다른 작은 컴퓨터를 만드는 기능이에요
+- Docker는 이 기능을 사용해서 컨테이너를 만들어요
+- Windows에서는 Hyper-V 또는 WSL 2가 이 기능을 제공해요
+
+**해결 방법 - 단계별로 완전히 이해하기!**
+
+#### 방법 1: Windows 기능에서 가상화 활성화하기 (가장 일반적인 해결책)
+
+**1단계: Windows 기능 켜기/끄기 열기**
+
+```
+1. Windows 시작 메뉴에서 "Windows 기능 켜기/끄기" 검색
+2. 또는 "제어판" → "프로그램" → "Windows 기능 켜기/끄기"
+3. 관리자 권한이 필요할 수 있어요!
+```
+
+**2단계: 필요한 기능들 활성화하기**
+
+다음 항목들을 모두 체크하세요:
+
+```
+✅ Windows 하이퍼바이저 플랫폼
+✅ 가상 머신 플랫폼
+✅ WSL (Windows Subsystem for Linux) - 없으면 아래 방법으로 설치하세요!
+```
+
+**⚠️ WSL이 보이지 않는다면?**
+
+**WSL이 Windows 기능 켜기/끄기에 없다면 PowerShell로 설치해야 해요!**
+
+**PowerShell을 관리자 권한으로 실행한 후:**
+```powershell
+wsl --install
+```
+
+이 명령어 하나로 WSL과 필요한 모든 기능이 자동으로 설치돼요!
+- 시간: 약 5-10분 소요
+- 설치 후 컴퓨터 재시작 필요
+
+**실제 화면에서 확인할 것:**
+- 각 항목 옆에 체크박스가 있어요
+- 체크박스를 클릭해서 ✅ 표시를 만들어요
+- "확인" 버튼을 클릭하면 Windows가 필요한 파일을 설치해요
+- WSL이 없다면 PowerShell로 먼저 설치한 후 다시 확인해요!
+
+**3단계: 컴퓨터 재시작하기**
+
+```
+- Windows 기능을 변경했으므로 컴퓨터를 재시작해야 해요!
+- 재시작 후 Docker Desktop을 다시 실행해보세요!
+```
+
+**4단계: Docker Desktop 다시 실행하기**
+
+```
+1. Docker Desktop 실행
+2. 오류가 사라졌는지 확인
+3. 정상적으로 시작되면 성공! ✅
+```
+
+#### 방법 2: BIOS/UEFI에서 가상화 활성화하기 (방법 1이 안 될 때)
+
+**이게 무슨 뜻일까요?**
+- BIOS/UEFI는 컴퓨터의 가장 기본적인 설정이에요
+- 컴퓨터를 켤 때 가장 먼저 실행되는 프로그램이에요
+- 여기서 가상화 기능을 켜야 해요!
+
+**1단계: BIOS/UEFI 진입하기**
+
+```
+1. 컴퓨터를 재시작하세요
+2. 컴퓨터가 켜지는 순간 특정 키를 누르세요:
+   - 보통 F2, F10, F12, Delete 키 중 하나예요
+   - 컴퓨터 제조사마다 다를 수 있어요
+   - 화면에 "Press F2 to enter Setup" 같은 메시지가 보일 거예요
+```
+
+**2단계: 가상화 설정 찾기**
+
+BIOS/UEFI 화면에서 다음 중 하나를 찾으세요:
+
+```
+- Virtualization Technology (VT-x) - Intel CPU인 경우
+- AMD-V - AMD CPU인 경우
+- Virtualization
+- Intel Virtualization Technology
+- SVM Mode (AMD CPU인 경우)
+```
+
+**3단계: 가상화 기능 활성화하기**
+
+```
+1. 찾은 항목을 선택하세요
+2. "Enabled" 또는 "Enabled"로 변경하세요
+3. 설정을 저장하고 나가세요 (보통 F10 키)
+```
+
+**4단계: 컴퓨터 재시작하기**
+
+```
+- BIOS/UEFI 설정을 변경했으므로 컴퓨터를 재시작해야 해요!
+- 재시작 후 Docker Desktop을 다시 실행해보세요!
+```
+
+#### 방법 3: 가상화가 활성화되었는지 확인하기
+
+**PowerShell에서 확인하기:**
+
+```powershell
+# PowerShell을 관리자 권한으로 실행한 후:
+systeminfo | findstr /C:"Hyper-V"
+```
+
+**결과 확인:**
+```
+- "Hyper-V 요구 사항" 섹션에서 확인
+- "가상화가 펌웨어에 사용 설정됨: 예" 라고 나오면 성공! ✅
+- "가상화가 펌웨어에 사용 설정됨: 아니오" 라고 나오면 BIOS에서 활성화해야 해요! ❌
+```
+
+**또는 작업 관리자에서 확인하기:**
+
+```
+1. Ctrl + Shift + Esc 키를 눌러 작업 관리자 열기
+2. "성능" 탭 클릭
+3. "CPU" 선택
+4. 오른쪽 아래에서 "가상화" 확인
+5. "사용"이라고 나오면 성공! ✅
+6. "사용 안 함"이라고 나오면 BIOS에서 활성화해야 해요! ❌
+```
+
+#### 방법 4: WSL 2로 전환하기 (Windows 11/10 권장)
+
+**WSL 2가 뭔가요?**
+- Windows Subsystem for Linux 2의 약자예요
+- Docker Desktop이 WSL 2를 사용하면 더 빠르고 안정적이에요!
+
+**WSL 2로 전환하기:**
+
+```powershell
+# PowerShell을 관리자 권한으로 실행한 후:
+wsl --set-default-version 2
+```
+
+**WSL 2가 설치되어 있지 않다면:**
+
+```powershell
+# PowerShell을 관리자 권한으로 실행한 후:
+dism.exe /online /enable-feature /featurename:Microsoft-Windows-Subsystem-Linux /all /norestart
+dism.exe /online /enable-feature /featurename:VirtualMachinePlatform /all /norestart
+```
+
+**확인하기:**
+
+```powershell
+wsl --status
+```
+
+**결과 확인:**
+```
+- "기본 버전: 2"라고 나오면 성공! ✅
+- "기본 버전: 1"이라고 나오면 WSL 2로 업그레이드해야 해요!
+```
+
+**비유로 정리:**
+- 가상화 = 레고 집을 지을 때 필요한 특별한 도구
+- 도구가 꺼져있음 = 가상화 기능이 비활성화됨
+- 도구를 켜기 = Windows 기능에서 가상화 활성화
+- BIOS에서 켜기 = 컴퓨터의 가장 기본적인 설정에서 활성화
+- 도구를 켜면 레고 집을 지을 수 있어요!
+
+**추가 팁:**
+- 노트북을 사용 중이라면 전원 설정을 "고성능" 모드로 변경해보세요
+- 일부 노트북은 배터리 모드에서 가상화가 비활성화될 수 있어요
+- Windows 업데이트를 최신 버전으로 유지하세요
 
 ---
 

@@ -23,6 +23,24 @@
         "get_popular_books",
         "get_book_details"
       ]
+    },
+    "error-log-analyzer": {
+      "command": "python",
+      "args": ["C:/test/test02/mcp-error-log-analyzer.py"],
+      "cwd": "C:/test/test02",
+      "description": "에러 로그 자동 분석 서버 - GCP 및 일반 로그 분석, 조치 방법 및 재발 방지책 제안",
+      "tools": [
+        "analyze_error_logs"
+      ]
+    },
+    "sql-query-analyzer": {
+      "command": "python",
+      "args": ["C:/test/test02/mcp-sql-query-analyzer.py"],
+      "cwd": "C:/test/test02",
+      "description": "SQL 쿼리 자동 분석 서버 - PostgreSQL 쿼리 구조, 성능, 최적화, 복잡도, 보안 분석",
+      "tools": [
+        "analyze_sql_query"
+      ]
     }
   }
 }

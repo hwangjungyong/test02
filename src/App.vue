@@ -13,11 +13,8 @@
         <button @click="showSignupModal = true" class="btn btn-signup">회원가입</button>
       </div>
       
-      <button @click="openMCPGuide" class="btn btn-guide">
-        📖 MCP 가이드 보기
-      </button>
-      <button @click="openPythonMCPGuide" class="btn btn-guide-python">
-        🐍 Python MCP 가이드 보기
+      <button @click="openDocsLibrary" class="btn btn-docs-library">
+        📚 가이드 문서
       </button>
       <button @click="openAPIDocs" class="btn btn-api-docs">
         📚 API DOCS 보기
@@ -38,6 +35,88 @@
       v-model="showSignupModal" 
       @success="handleAuthSuccess"
     />
+
+    <!-- 문서 라이브러리 모달 -->
+    <div v-if="showDocsLibraryModal" class="modal-overlay" @click="showDocsLibraryModal = false">
+      <div class="modal-content docs-library-modal" @click.stop style="max-width: 1200px; max-height: 90vh;">
+        <div class="modal-header">
+          <h2>📚 가이드 문서</h2>
+          <button @click="showDocsLibraryModal = false" class="btn-close">✕</button>
+        </div>
+        <div class="modal-body" style="overflow-y: auto; max-height: calc(90vh - 120px);">
+          <!-- 문서 목록 -->
+          <div v-if="docsLoading" class="loading">
+            <p>문서 목록을 불러오는 중...</p>
+          </div>
+          
+          <div v-else-if="docsError" class="error-message">
+            {{ docsError }}
+          </div>
+          
+          <div v-else-if="docsList && docsList.length > 0" class="docs-list">
+            <div class="docs-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px;">
+              <div 
+                v-for="doc in docsList" 
+                :key="doc.name"
+                @click="openDocViewer(doc)"
+                class="doc-card"
+                style="padding: 16px; border: 1px solid #ddd; border-radius: 8px; cursor: pointer; background: white; transition: all 0.2s;"
+                @mouseover="$event.currentTarget.style.boxShadow = '0 4px 8px rgba(0,0,0,0.1)'"
+                @mouseleave="$event.currentTarget.style.boxShadow = 'none'"
+              >
+                <h3 style="margin: 0 0 8px 0; color: #333; font-size: 16px;">
+                  {{ doc.title }}
+                </h3>
+                <div style="font-size: 12px; color: #666; margin-bottom: 8px;">
+                  <div>📄 {{ doc.name }}</div>
+                  <div style="margin-top: 4px;">
+                    📊 {{ formatFileSize(doc.size) }}
+                  </div>
+                  <div style="margin-top: 4px;">
+                    📅 {{ formatDate(doc.modified) }}
+                  </div>
+                </div>
+                <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #eee;">
+                  <span style="color: #2196f3; font-size: 12px; font-weight: bold;">클릭하여 보기 →</span>
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          <div v-else class="no-docs" style="padding: 40px; text-align: center; color: #666;">
+            <p>문서가 없습니다.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 문서 뷰어 모달 -->
+    <div v-if="showDocViewerModal" class="modal-overlay" @click="closeDocViewer" style="z-index: 2000;">
+      <div class="modal-content doc-viewer-modal" @click.stop style="max-width: 1000px; max-height: 90vh; z-index: 2001;">
+        <div class="modal-header">
+          <h2>{{ currentDoc?.title || '문서 보기' }}</h2>
+          <div style="display: flex; gap: 8px;">
+            <button @click="closeDocViewer" class="btn-close">✕</button>
+          </div>
+        </div>
+        <div class="modal-body" style="overflow-y: auto; max-height: calc(90vh - 120px);">
+          <div v-if="docContentLoading" class="loading">
+            <p>문서를 불러오는 중...</p>
+          </div>
+          
+          <div v-else-if="docContentError" class="error-message">
+            {{ docContentError }}
+          </div>
+          
+          <div 
+            v-else-if="docContentHtml" 
+            class="doc-content"
+            v-html="docContentHtml"
+            style="padding: 20px; line-height: 1.6; color: #333;"
+          ></div>
+        </div>
+      </div>
+    </div>
 
     <!-- 사용자 관리 모달 -->
     <div v-if="showUserManagementModal" class="modal-overlay" @click="showUserManagementModal = false">
@@ -499,14 +578,53 @@
             </div>
 
             <div v-else-if="dockerStatus">
+              <!-- WSL 환경 안내 -->
+              <div v-if="dockerStatus.docker?.useWSL" style="margin-bottom: 24px; padding: 16px; background: #e3f2fd; border-left: 4px solid #2196f3; border-radius: 4px;">
+                <h4 style="margin-top: 0; color: #1976d2;">🐧 WSL 2 환경 감지됨</h4>
+                <p style="margin: 8px 0; color: #424242;">
+                  {{ dockerStatus.docker?.wslMessage || 'WSL 2 환경에서 Docker Engine을 사용 중입니다. 모든 명령어는 WSL을 통해 실행됩니다.' }}
+                </p>
+                <div style="margin-top: 12px; padding: 12px; background: white; border-radius: 4px;">
+                  <strong style="color: #1976d2;">사용 방법:</strong>
+                  <ul style="margin: 8px 0; padding-left: 20px; color: #424242;">
+                    <li style="margin-bottom: 8px;">
+                      <strong>WSL 2 내에서 Docker Engine 설치 (아직 설치하지 않은 경우):</strong>
+                      <div style="margin-top: 4px; padding: 8px; background: #f5f5f5; border-radius: 4px; font-family: monospace; font-size: 12px;">
+                        wsl -d Ubuntu<br>
+                        curl -fsSL https://get.docker.com -o get-docker.sh<br>
+                        sudo sh get-docker.sh<br>
+                        sudo usermod -aG docker $USER
+                      </div>
+                    </li>
+                    <li style="margin-bottom: 8px;">
+                      <strong>Docker 서비스 시작:</strong>
+                      <div style="margin-top: 4px; padding: 8px; background: #f5f5f5; border-radius: 4px; font-family: monospace; font-size: 12px;">
+                        sudo service docker start
+                      </div>
+                    </li>
+                    <li>
+                      <strong>Windows에서 WSL의 Docker 사용:</strong>
+                      <div style="margin-top: 4px; padding: 8px; background: #f5f5f5; border-radius: 4px; font-family: monospace; font-size: 12px;">
+                        # WSL 접두사를 붙여서 실행<br>
+                        wsl docker ps<br>
+                        wsl docker-compose up -d
+                      </div>
+                    </li>
+                  </ul>
+                </div>
+                <p style="margin-top: 12px; font-size: 12px; color: #666;">
+                  💡 <strong>참고:</strong> WSL 2 환경에서는 모든 Docker 명령어에 <code>wsl</code> 접두사가 자동으로 추가됩니다.
+                </p>
+              </div>
+
               <!-- Docker 설치 상태 -->
               <div class="docker-info-section" style="margin-bottom: 24px; padding: 16px; background: #f5f5f5; border-radius: 8px;">
                 <h4 style="margin-top: 0;">Docker 정보</h4>
                 <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px;">
                   <div>
                     <strong>설치 여부:</strong>
-                    <span :style="{ color: dockerStatus.docker?.installed ? '#4caf50' : '#f44336' }">
-                      {{ dockerStatus.docker?.installed ? '✅ 설치됨' : '❌ 미설치' }}
+                    <span :style="{ color: dockerStatus.docker?.installed ? '#4caf50' : '#ff9800' }">
+                      {{ dockerStatus.docker?.installed ? '✅ 설치됨' : '⚠️ 미설치 (선택사항)' }}
                     </span>
                   </div>
                   <div v-if="dockerStatus.docker?.installed">
@@ -514,9 +632,69 @@
                   </div>
                   <div>
                     <strong>실행 상태:</strong>
-                    <span :style="{ color: dockerStatus.docker?.running ? '#4caf50' : '#f44336' }">
+                    <span :style="{ color: dockerStatus.docker?.running ? '#4caf50' : '#ff9800' }">
                       {{ dockerStatus.docker?.running ? '✅ 실행 중' : '⏸️ 중지됨' }}
                     </span>
+                  </div>
+                </div>
+                
+                <!-- Docker 없이도 개발 가능 안내 -->
+                <div v-if="!dockerStatus.docker?.installed" style="margin-top: 16px; padding: 12px; background: #e8f5e9; border-left: 4px solid #4caf50; border-radius: 4px;">
+                  <h5 style="margin: 0 0 8px 0; color: #2e7d32;">💡 Docker 없이도 개발 가능합니다!</h5>
+                  <p style="margin: 0 0 8px 0; color: #424242; font-size: 14px;">
+                    이 프로젝트는 Docker 없이도 개발할 수 있습니다. 다음 명령어로 실행하세요:
+                  </p>
+                  <div style="background: white; padding: 12px; border-radius: 4px; font-family: monospace; font-size: 12px; margin-top: 8px;">
+                    <div style="margin-bottom: 4px;"><strong>모든 서버 실행:</strong></div>
+                    <div style="color: #1976d2;">npm run start:all</div>
+                    <div style="margin-top: 8px; margin-bottom: 4px;"><strong>또는 개별 실행:</strong></div>
+                    <div style="color: #1976d2;">npm run api-server</div>
+                    <div style="color: #1976d2;">npm run dev</div>
+                  </div>
+                  <p style="margin: 8px 0 0 0; font-size: 12px; color: #666;">
+                    Docker는 배포나 프로덕션 환경에서만 필요합니다. 개발 중에는 선택사항입니다.
+                  </p>
+                </div>
+                
+                <!-- 컨테이너 제어 버튼 -->
+                <div v-if="dockerStatus.docker?.installed" style="margin-top: 16px; padding-top: 16px; border-top: 1px solid #ddd;">
+                  <h5 style="margin: 0 0 12px 0;">컨테이너 제어</h5>
+                  <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                    <button 
+                      @click="startDockerContainers" 
+                      class="btn"
+                      :disabled="dockerContainerActionLoading"
+                      style="background: #4caf50; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; font-size: 14px;"
+                    >
+                      {{ dockerContainerActionLoading ? '실행 중...' : '▶️ 컨테이너 시작' }}
+                    </button>
+                    <button 
+                      @click="stopDockerContainers" 
+                      class="btn"
+                      :disabled="dockerContainerActionLoading"
+                      style="background: #f44336; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; font-size: 14px;"
+                    >
+                      {{ dockerContainerActionLoading ? '중지 중...' : '⏹️ 컨테이너 중지' }}
+                    </button>
+                    <button 
+                      @click="restartDockerContainers" 
+                      class="btn"
+                      :disabled="dockerContainerActionLoading"
+                      style="background: #ff9800; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; font-size: 14px;"
+                    >
+                      {{ dockerContainerActionLoading ? '재시작 중...' : '🔄 컨테이너 재시작' }}
+                    </button>
+                    <button 
+                      @click="loadDockerStatus" 
+                      class="btn"
+                      :disabled="dockerStatusLoading"
+                      style="background: #2196f3; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; font-size: 14px;"
+                    >
+                      {{ dockerStatusLoading ? '새로고침 중...' : '🔄 상태 새로고침' }}
+                    </button>
+                  </div>
+                  <div v-if="dockerContainerActionMessage" style="margin-top: 12px; padding: 8px; background: #e3f2fd; border-left: 3px solid #2196f3; border-radius: 4px; font-size: 12px;">
+                    {{ dockerContainerActionMessage }}
                   </div>
                 </div>
               </div>
@@ -580,11 +758,37 @@
             <div style="margin-top: 24px; padding-top: 24px; border-top: 1px solid #ddd;">
               <h4>Docker 명령어 가이드</h4>
               <div style="background: #f5f5f5; padding: 16px; border-radius: 8px; font-family: monospace; font-size: 12px;">
-                <div style="margin-bottom: 8px;"><strong>컨테이너 시작:</strong> docker-compose up -d</div>
-                <div style="margin-bottom: 8px;"><strong>컨테이너 중지:</strong> docker-compose down</div>
-                <div style="margin-bottom: 8px;"><strong>컨테이너 재시작:</strong> docker-compose restart</div>
-                <div style="margin-bottom: 8px;"><strong>로그 확인:</strong> docker logs test02-frontend</div>
-                <div><strong>상태 확인:</strong> docker ps</div>
+                <div v-if="dockerStatus.docker?.useWSL" style="margin-bottom: 12px; padding: 8px; background: #e3f2fd; border-left: 3px solid #2196f3; border-radius: 4px;">
+                  <strong style="color: #1976d2;">🐧 WSL 환경:</strong> 다음 명령어는 WSL 2를 통해 실행됩니다.
+                </div>
+                <div style="margin-bottom: 8px;">
+                  <strong>컨테이너 시작:</strong> 
+                  <span v-if="dockerStatus.docker?.useWSL">wsl docker-compose up -d</span>
+                  <span v-else>docker-compose up -d</span>
+                </div>
+                <div style="margin-bottom: 8px;">
+                  <strong>컨테이너 중지:</strong> 
+                  <span v-if="dockerStatus.docker?.useWSL">wsl docker-compose down</span>
+                  <span v-else>docker-compose down</span>
+                </div>
+                <div style="margin-bottom: 8px;">
+                  <strong>컨테이너 재시작:</strong> 
+                  <span v-if="dockerStatus.docker?.useWSL">wsl docker-compose restart</span>
+                  <span v-else>docker-compose restart</span>
+                </div>
+                <div style="margin-bottom: 8px;">
+                  <strong>로그 확인:</strong> 
+                  <span v-if="dockerStatus.docker?.useWSL">wsl docker logs test02-frontend</span>
+                  <span v-else>docker logs test02-frontend</span>
+                </div>
+                <div>
+                  <strong>상태 확인:</strong> 
+                  <span v-if="dockerStatus.docker?.useWSL">wsl docker ps</span>
+                  <span v-else>docker ps</span>
+                </div>
+                <div v-if="dockerStatus.docker?.useWSL" style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #ddd; font-size: 11px; color: #666;">
+                  💡 <strong>팁:</strong> WSL 2 내에서 직접 실행하려면 <code>wsl</code> 명령어로 진입한 후 명령어를 실행하세요.
+                </div>
               </div>
             </div>
           </div>
@@ -794,6 +998,25 @@
                 <div class="button-content">
                   <div class="button-title">AI 화면 검증</div>
                   <div class="button-subtitle">URL 접속하여 화면 캡처 및 요소 검증</div>
+                </div>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- SQL 쿼리 분석 섹션 -->
+        <div class="sql-query-analysis-section">
+          <div class="section-header">
+            <h2>📊 SQL 쿼리 분석</h2>
+            <p class="section-description">PostgreSQL 쿼리 구조, 성능, 최적화, 복잡도, 보안 분석</p>
+          </div>
+          <div class="feature-buttons">
+            <div class="button-group-card">
+              <button @click="toggleSQLQueryAnalysis" class="btn btn-sql-analysis" :class="{ active: showSQLQueryAnalysis }">
+                <div class="button-icon">📊</div>
+                <div class="button-content">
+                  <div class="button-title">SQL 쿼리 분석</div>
+                  <div class="button-subtitle">쿼리 구조, 성능, 보안 분석 및 최적화 제안</div>
                 </div>
               </button>
             </div>
@@ -1761,6 +1984,509 @@
             </div>
           </div>
         </div>
+
+        <!-- SQL 쿼리 분석 결과 영역 -->
+        <div v-if="showSQLQueryAnalysis" class="sql-query-analysis-container">
+          <h2>📊 SQL 쿼리 분석</h2>
+          <div class="sql-analysis-notice">
+            <p>ℹ️ PostgreSQL 쿼리를 분석하여 구조, 성능, 복잡도, 보안을 평가하고 최적화 제안을 제공합니다.</p>
+          </div>
+          
+          <div class="input-group">
+            <label for="sqlQueryFile">SQL 파일 경로 (선택사항):</label>
+            <input
+              id="sqlQueryFile"
+              v-model="sqlQueryFile"
+              type="text"
+              placeholder="예: queries/complex_query.sql"
+              class="input-field"
+            />
+          </div>
+          
+          <div class="input-group">
+            <label for="sqlQueryText" style="font-size: 16px; font-weight: 600; margin-bottom: 0.75rem; display: block; color: #333;">
+              SQL 쿼리 입력:
+            </label>
+            <textarea
+              id="sqlQueryText"
+              v-model="sqlQueryText"
+              placeholder="SELECT * FROM users WHERE id = 1;&#10;&#10;또는 복잡한 쿼리를 붙여넣으세요..."
+              class="sql-query-textarea"
+              rows="25"
+            ></textarea>
+          </div>
+          
+          <div class="sql-analysis-actions">
+            <button @click="analyzeSQLQuery" class="btn-analyze-sql" :disabled="isAnalyzingSQL">
+              <span class="btn-icon" v-if="!isAnalyzingSQL">🔍</span>
+              <span class="loading-spinner" v-if="isAnalyzingSQL"></span>
+              <span class="btn-text">
+                <span v-if="!isAnalyzingSQL">AI 쿼리 분석하기</span>
+                <span v-else>분석 중...</span>
+              </span>
+            </button>
+            <button @click="clearSQLAnalysis" class="btn-clear-sql">
+              <span class="btn-icon">🗑️</span>
+              <span class="btn-text">초기화</span>
+            </button>
+          </div>
+          
+          <div v-if="sqlAnalysisError" class="error">
+            <p>{{ sqlAnalysisError }}</p>
+          </div>
+          
+          <div v-if="sqlAnalysisResult" class="sql-analysis-results">
+            <h3>분석 결과</h3>
+            
+            <!-- 리니지 정보 - 맨 위에 표시 -->
+            <div v-if="sqlAnalysisResult && sqlAnalysisResult.lineage" class="analysis-section lineage-section-featured">
+              <div class="lineage-header-with-action">
+                <h4>🔗 데이터 리니지 정보</h4>
+                <button 
+                  @click="scrollToLineageVisualization" 
+                  class="btn btn-lineage-quick-access"
+                  v-if="sqlAnalysisReport && sqlAnalysisReport.lineageHtmlPath"
+                >
+                  📊 리니지 연관도 바로가기
+                </button>
+              </div>
+              
+              <!-- 리니지 연관도 요약 -->
+              <div v-if="calculateLineageConnectivity()" class="lineage-connectivity-summary">
+                <div class="connectivity-info">
+                  <span class="connectivity-label">리니지 연관도:</span>
+                  <span class="connectivity-value" :class="getConnectivityClass(calculateLineageConnectivity())">
+                    {{ calculateLineageConnectivity() }}%
+                  </span>
+                  <span class="connectivity-details">
+                    (테이블: {{ sqlAnalysisResult.lineage.tables?.length || 0 }}개, 
+                    JOIN: {{ sqlAnalysisResult.lineage.join_relationships?.length || 0 }}개,
+                    CTE: {{ sqlAnalysisResult.lineage.ctes?.length || 0 }}개)
+                  </span>
+                </div>
+                <div class="connectivity-bar">
+                  <div 
+                    class="connectivity-fill" 
+                    :style="{ width: calculateLineageConnectivity() + '%' }"
+                    :class="getConnectivityClass(calculateLineageConnectivity())"
+                  ></div>
+                </div>
+              </div>
+              
+              <!-- 테이블 목록 -->
+              <div v-if="sqlAnalysisResult.lineage.tables && sqlAnalysisResult.lineage.tables.length > 0" class="lineage-info-block">
+                <h5>📊 테이블 목록</h5>
+                <div class="lineage-tags">
+                  <span v-for="(table, index) in sqlAnalysisResult.lineage.tables" :key="index" class="lineage-tag table-tag">
+                    {{ table }}
+                  </span>
+                </div>
+              </div>
+              
+              <!-- CTE 목록 -->
+              <div v-if="sqlAnalysisResult.lineage.ctes && sqlAnalysisResult.lineage.ctes.length > 0" class="lineage-info-block">
+                <h5>📝 CTE 목록</h5>
+                <div class="lineage-tags">
+                  <span v-for="(cte, index) in sqlAnalysisResult.lineage.ctes" :key="index" class="lineage-tag cte-tag">
+                    {{ cte }}
+                  </span>
+                </div>
+              </div>
+              
+              <!-- JOIN 관계 -->
+              <div v-if="sqlAnalysisResult.lineage.join_relationships && sqlAnalysisResult.lineage.join_relationships.length > 0" class="lineage-info-block">
+                <h5>🔗 JOIN 관계 ({{ sqlAnalysisResult.lineage.join_relationships.length }}개)</h5>
+                <div class="join-relationships-list">
+                  <div v-for="(join, index) in sqlAnalysisResult.lineage.join_relationships" :key="index" class="join-item">
+                    <div class="join-header">
+                      <span class="join-type" :class="getJoinTypeClass(join.join_type)">{{ join.join_type }}</span>
+                      <span class="join-tables">
+                        <strong>{{ join.left_table || 'unknown' }}</strong> → <strong>{{ join.right_table || 'unknown' }}</strong>
+                      </span>
+                    </div>
+                    <div v-if="join.condition" class="join-condition">
+                      조건: <code>{{ join.condition }}</code>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              
+              <!-- CTE 의존성 -->
+              <div v-if="sqlAnalysisResult.lineage.cte_dependencies && sqlAnalysisResult.lineage.cte_dependencies.length > 0" class="lineage-info-block">
+                <h5>📋 CTE 의존성</h5>
+                <div class="join-relationships-list">
+                  <div v-for="(dep, index) in sqlAnalysisResult.lineage.cte_dependencies" :key="index" class="join-item">
+                    <span class="join-tables">
+                      <strong>{{ dep.cte_name }}</strong> ← {{ dep.referenced_cte || dep.referenced_table }}
+                    </span>
+                  </div>
+                </div>
+              </div>
+              
+              <!-- 서브쿼리 관계 -->
+              <div v-if="sqlAnalysisResult.lineage.subquery_relationships && sqlAnalysisResult.lineage.subquery_relationships.length > 0" class="lineage-info-block">
+                <h5>🔍 서브쿼리 관계</h5>
+                <div class="join-relationships-list">
+                  <div v-for="(subq, index) in sqlAnalysisResult.lineage.subquery_relationships" :key="index" class="join-item">
+                    <span class="join-tables">
+                      위치: {{ subq.location }}, 깊이: {{ subq.depth }}, 참조 테이블: {{ subq.referenced_tables?.join(', ') || '없음' }}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            <!-- 테이블 관계 그래프 - 선택적 표시 -->
+            <div v-if="sqlAnalysisResult && sqlAnalysisResult.lineage && sqlAnalysisResult.lineage.join_relationships && sqlAnalysisResult.lineage.join_relationships.length > 0" class="analysis-section graph-section-featured">
+              <div class="graph-header">
+                <h4>📈 테이블 관계 그래프</h4>
+                <p class="graph-subtitle">쿼리의 테이블 간 JOIN 관계를 시각화합니다</p>
+              </div>
+              <div class="table-relationship-graph-container featured-graph">
+                <div ref="sqlTableGraphContainer" class="sql-table-graph featured"></div>
+                <div class="graph-legend">
+                  <div class="legend-item">
+                    <span class="legend-color" style="background: #4a90e2;"></span>
+                    <span>테이블</span>
+                  </div>
+                  <div class="legend-item">
+                    <span class="legend-color" style="background: #f5576c;"></span>
+                    <span>CTE</span>
+                  </div>
+                  <div class="legend-item">
+                    <span class="legend-line" style="border-top: 2px solid #4a90e2;"></span>
+                    <span>LEFT JOIN</span>
+                  </div>
+                  <div class="legend-item">
+                    <span class="legend-line" style="border-top: 2px solid #f5576c;"></span>
+                    <span>INNER JOIN</span>
+                  </div>
+                  <div class="legend-item">
+                    <span class="legend-line" style="border-top: 2px dashed #4a90e2;"></span>
+                    <span>FULL OUTER JOIN</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            <!-- 요약 정보 -->
+            <div class="analysis-summary">
+              <h4>📋 실행 요약</h4>
+              <div class="summary-grid">
+                <div class="summary-item">
+                  <span class="summary-label">성능 점수</span>
+                  <span class="summary-value" :class="getScoreClass(sqlAnalysisResult.performance?.score)">
+                    {{ sqlAnalysisResult.performance?.score || 0 }}/100
+                  </span>
+                  <span class="summary-level">{{ sqlAnalysisResult.performance?.level || 'N/A' }}</span>
+                </div>
+                <div class="summary-item">
+                  <span class="summary-label">복잡도 점수</span>
+                  <span class="summary-value" :class="getScoreClass(sqlAnalysisResult.complexity?.score, true)">
+                    {{ sqlAnalysisResult.complexity?.score || 0 }}/100
+                  </span>
+                  <span class="summary-level">{{ sqlAnalysisResult.complexity?.level || 'N/A' }}</span>
+                </div>
+                <div class="summary-item">
+                  <span class="summary-label">보안 점수</span>
+                  <span class="summary-value" :class="getScoreClass(sqlAnalysisResult.security?.score)">
+                    {{ sqlAnalysisResult.security?.score || 0 }}/100
+                  </span>
+                  <span class="summary-level">{{ sqlAnalysisResult.security?.level || 'N/A' }}</span>
+                </div>
+              </div>
+            </div>
+            
+            <!-- 구조 분석 -->
+            <div v-if="sqlAnalysisResult.structure" class="analysis-section">
+              <h4>📐 쿼리 구조 분석</h4>
+              <div class="structure-info">
+                <p><strong>쿼리 타입:</strong> {{ sqlAnalysisResult.structure.query_type }}</p>
+                <p><strong>테이블 수:</strong> {{ sqlAnalysisResult.structure.table_count }}개</p>
+                <p><strong>컬럼 수:</strong> {{ sqlAnalysisResult.structure.column_count }}개</p>
+                <p><strong>JOIN 수:</strong> {{ sqlAnalysisResult.structure.join_count }}개</p>
+                <p><strong>서브쿼리 수:</strong> {{ sqlAnalysisResult.structure.subquery_count }}개</p>
+                <p><strong>최대 서브쿼리 깊이:</strong> {{ sqlAnalysisResult.structure.max_subquery_depth }}</p>
+                <p><strong>쿼리 길이:</strong> {{ sqlAnalysisResult.structure.query_length }} 문자, {{ sqlAnalysisResult.structure.query_lines }} 라인</p>
+              </div>
+            </div>
+            
+            <!-- 성능 분석 -->
+            <div v-if="sqlAnalysisResult.performance" class="analysis-section">
+              <h4>⚡ 성능 분석</h4>
+              <div v-if="sqlAnalysisResult.performance.issues && sqlAnalysisResult.performance.issues.length > 0">
+                <h5>성능 이슈:</h5>
+                <ul>
+                  <li v-for="(issue, index) in sqlAnalysisResult.performance.issues" :key="index">
+                    <strong>[{{ issue.severity }}]</strong> {{ issue.type }}: {{ issue.message }}
+                    <br><small>영향: {{ issue.impact }}</small>
+                  </li>
+                </ul>
+              </div>
+              <div v-else>
+                <p>성능 이슈가 발견되지 않았습니다.</p>
+              </div>
+            </div>
+            
+            <!-- 보안 분석 -->
+            <div v-if="sqlAnalysisResult.security" class="analysis-section">
+              <h4>🔒 보안 분석</h4>
+              <div v-if="sqlAnalysisResult.security.vulnerabilities && sqlAnalysisResult.security.vulnerabilities.length > 0">
+                <h5>보안 취약점:</h5>
+                <ul>
+                  <li v-for="(vuln, index) in sqlAnalysisResult.security.vulnerabilities" :key="index">
+                    <strong>[{{ vuln.severity }}]</strong> {{ vuln.type }}: {{ vuln.message }}
+                    <br><small>영향: {{ vuln.impact }}</small>
+                    <br><small>권장사항: {{ vuln.recommendation }}</small>
+                  </li>
+                </ul>
+              </div>
+              <div v-else>
+                <p>보안 취약점이 발견되지 않았습니다.</p>
+              </div>
+            </div>
+            
+            <!-- 최적화 제안 -->
+            <div v-if="sqlAnalysisResult.optimization" class="analysis-section">
+              <h4>💡 최적화 제안</h4>
+              <div v-if="sqlAnalysisResult.optimization.suggestions && sqlAnalysisResult.optimization.suggestions.length > 0">
+                <div v-for="(suggestion, index) in sqlAnalysisResult.optimization.suggestions" :key="index" class="suggestion-item">
+                  <strong>[{{ suggestion.priority }}]</strong> {{ suggestion.type }}: {{ suggestion.message }}
+                  <div v-if="suggestion.example" class="suggestion-example">
+                    <strong>예시:</strong> <code>{{ suggestion.example }}</code>
+                  </div>
+                  <div v-if="suggestion.expected_improvement" class="suggestion-improvement">
+                    <strong>예상 개선율:</strong> {{ suggestion.expected_improvement }}
+                  </div>
+                </div>
+              </div>
+              <div v-else>
+                <p>최적화 제안이 없습니다.</p>
+              </div>
+            </div>
+            
+            <!-- 리포트 다운로드 -->
+            <div class="analysis-actions">
+              <button @click="downloadSQLReport('json')" class="btn btn-download">
+                📥 JSON 리포트 다운로드
+              </button>
+              <button @click="downloadSQLReport('markdown')" class="btn btn-download">
+                📥 마크다운 리포트 다운로드
+              </button>
+              
+              <!-- 리니지 생성 중 프로그레스 -->
+              <div v-if="isGeneratingLineage" class="lineage-generation-progress">
+                <div class="progress-label">리니지 시각화 생성 중...</div>
+                <div class="progress-bar-container">
+                  <div class="progress-bar-fill" :style="{ width: lineageGenerationProgress + '%' }"></div>
+                </div>
+                <div class="progress-percentage">{{ Math.round(lineageGenerationProgress) }}%</div>
+              </div>
+              
+              <button 
+                v-if="sqlAnalysisReport && sqlAnalysisReport.lineageHtmlPath && !isGeneratingLineage" 
+                @click="scrollToLineageVisualization" 
+                class="btn btn-lineage-quick-access"
+              >
+                📊 리니지 연관도 바로가기
+              </button>
+              <button 
+                v-if="sqlAnalysisReport && sqlAnalysisReport.lineageHtmlPath && !isGeneratingLineage" 
+                @click="toggleLineageVisualization" 
+                class="btn btn-open-lineage"
+              >
+                {{ showLineageVisualization ? '🔽 리니지 시각화 숨기기' : '🌐 리니지 시각화 보기' }}
+              </button>
+            </div>
+            
+            <!-- 리니지 시각화 영역 -->
+            <div v-if="showLineageVisualization && sqlAnalysisReport && sqlAnalysisReport.lineageHtmlPath" class="lineage-visualization-container">
+              <div class="lineage-visualization-header">
+                <h4>📊 데이터 리니지 시각화</h4>
+                <button @click="showLineageVisualization = false" class="btn-close-visualization">✕</button>
+              </div>
+              <div class="lineage-visualization-content">
+                <div v-if="lineageHtmlContent" v-html="lineageHtmlContent" class="lineage-html-content"></div>
+                <div v-else class="lineage-loading">
+                  <p>리니지 시각화를 불러오는 중...</p>
+                </div>
+              </div>
+            </div>
+            
+            <!-- 영향도 분석 섹션 -->
+            <div v-if="sqlAnalysisResult && sqlAnalysisResult.lineage" class="impact-analysis-section">
+              <div class="impact-analysis-header">
+                <h4>🔍 영향도 분석</h4>
+                <p class="impact-analysis-description">
+                  특정 테이블 또는 컬럼에 이슈가 발생했을 때 영향받는 쿼리를 분석합니다.
+                </p>
+              </div>
+              
+              <div class="impact-analysis-inputs">
+                <div class="input-group">
+                  <label for="impactTargetTable">분석 대상 테이블:</label>
+                  <select
+                    id="impactTargetTable"
+                    v-model="impactTargetTable"
+                    class="input-field"
+                  >
+                    <option value="">테이블 선택</option>
+                    <option v-for="table in sqlAnalysisResult.lineage.tables" :key="table" :value="table">
+                      {{ table }}
+                    </option>
+                  </select>
+                </div>
+                
+                <div class="input-group">
+                  <label for="impactTargetColumn">분석 대상 컬럼 (선택사항):</label>
+                  <input
+                    id="impactTargetColumn"
+                    v-model="impactTargetColumn"
+                    type="text"
+                    placeholder="컬럼명 입력"
+                    class="input-field"
+                  />
+                </div>
+                
+                <div class="impact-analysis-actions">
+                  <button 
+                    @click="analyzeImpact" 
+                    class="btn-analyze-impact" 
+                    :disabled="isAnalyzingImpact || !impactTargetTable"
+                  >
+                    <span class="btn-icon" v-if="!isAnalyzingImpact">🔍</span>
+                    <span class="loading-spinner" v-if="isAnalyzingImpact"></span>
+                    <span class="btn-text">
+                      <span v-if="!isAnalyzingImpact">영향도 분석하기</span>
+                      <span v-else>분석 중...</span>
+                    </span>
+                  </button>
+                  <button 
+                    @click="clearImpactAnalysis" 
+                    class="btn-clear-impact"
+                    v-if="impactAnalysisResult"
+                  >
+                    <span class="btn-icon">🗑️</span>
+                    <span class="btn-text">초기화</span>
+                  </button>
+                </div>
+              </div>
+              
+              <div v-if="impactAnalysisError" class="error">
+                <p>{{ impactAnalysisError }}</p>
+              </div>
+              
+              <div v-if="impactAnalysisResult" class="impact-analysis-results">
+                <h5>영향도 분석 결과</h5>
+                
+                <div class="impact-summary">
+                  <div class="impact-summary-item">
+                    <span class="impact-summary-label">영향도 수준:</span>
+                    <span class="impact-summary-value" :class="getImpactLevelClass(impactAnalysisResult.impact_level)">
+                      {{ impactAnalysisResult.impact_level }}
+                    </span>
+                  </div>
+                  <div class="impact-summary-item">
+                    <span class="impact-summary-label">영향도 점수:</span>
+                    <span class="impact-summary-value">{{ impactAnalysisResult.impact_score }}/100</span>
+                  </div>
+                  <div class="impact-summary-item">
+                    <span class="impact-summary-label">직접 영향:</span>
+                    <span class="impact-summary-value">{{ impactAnalysisResult.statistics.total_direct_impacts }}개</span>
+                  </div>
+                  <div class="impact-summary-item">
+                    <span class="impact-summary-label">간접 영향:</span>
+                    <span class="impact-summary-value">{{ impactAnalysisResult.statistics.total_indirect_impacts }}개</span>
+                  </div>
+                </div>
+                
+                <div v-if="impactAnalysisResult.direct_impacts && impactAnalysisResult.direct_impacts.length > 0" class="impact-list">
+                  <h6>직접 영향</h6>
+                  <div class="impact-items">
+                    <div 
+                      v-for="(impact, index) in impactAnalysisResult.direct_impacts" 
+                      :key="index" 
+                      class="impact-item"
+                      :class="getImpactLevelClass(impact.impact_level)"
+                    >
+                      <div class="impact-item-header">
+                        <span class="impact-type">{{ impact.type }}</span>
+                        <span class="impact-level">{{ impact.impact_level }}</span>
+                        <span class="impact-location">{{ impact.location }}</span>
+                      </div>
+                      <div class="impact-snippet">{{ impact.query_snippet }}</div>
+                    </div>
+                  </div>
+                </div>
+                
+                <div v-if="impactAnalysisResult.indirect_impacts && impactAnalysisResult.indirect_impacts.length > 0" class="impact-list">
+                  <h6>간접 영향</h6>
+                  <div class="impact-items">
+                    <div 
+                      v-for="(impact, index) in impactAnalysisResult.indirect_impacts" 
+                      :key="index" 
+                      class="impact-item indirect"
+                    >
+                      <div class="impact-item-header">
+                        <span class="impact-type">{{ impact.type }}</span>
+                        <span class="impact-level">{{ impact.impact_level }}</span>
+                      </div>
+                      <div class="impact-path">{{ impact.path }}</div>
+                      <div v-if="impact.related_table" class="impact-related">
+                        관련 테이블: {{ impact.related_table }}
+                      </div>
+                      <div v-if="impact.cte_name" class="impact-related">
+                        관련 CTE: {{ impact.cte_name }}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                
+                <div v-if="impactAnalysisResult.affected_tables && impactAnalysisResult.affected_tables.length > 0" class="impact-affected">
+                  <h6>영향받는 테이블</h6>
+                  <div class="impact-tags">
+                    <span 
+                      v-for="(table, index) in impactAnalysisResult.affected_tables" 
+                      :key="index" 
+                      class="impact-tag"
+                    >
+                      {{ table }}
+                    </span>
+                  </div>
+                </div>
+                
+                <div v-if="impactAnalysisResult.affected_ctes && impactAnalysisResult.affected_ctes.length > 0" class="impact-affected">
+                  <h6>영향받는 CTE</h6>
+                  <div class="impact-tags">
+                    <span 
+                      v-for="(cte, index) in impactAnalysisResult.affected_ctes" 
+                      :key="index" 
+                      class="impact-tag cte-tag"
+                    >
+                      {{ cte }}
+                    </span>
+                  </div>
+                </div>
+                
+                <div v-if="impactAnalysisResult.recommendations && impactAnalysisResult.recommendations.length > 0" class="impact-recommendations">
+                  <h6>권장사항</h6>
+                  <div class="recommendation-items">
+                    <div 
+                      v-for="(rec, index) in impactAnalysisResult.recommendations" 
+                      :key="index" 
+                      class="recommendation-item"
+                      :class="rec.priority.toLowerCase()"
+                    >
+                      <div class="recommendation-priority">{{ rec.priority }}</div>
+                      <div class="recommendation-message">{{ rec.message }}</div>
+                      <div class="recommendation-action">{{ rec.action }}</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -1786,17 +2512,25 @@
                     <th>순번</th>
                     <th>방송국</th>
                     <th>타입</th>
+                    <th>노래 제목</th>
+                    <th>가수</th>
+                    <th>장르</th>
+                    <th>시간</th>
                   </tr>
                 </thead>
                 <tbody>
                   <tr v-for="(item, index) in fetchResultData" :key="index">
                     <td>{{ index + 1 }}</td>
-                    <td>{{ item.방송국 }}</td>
+                    <td><strong>{{ item.방송국 }}</strong></td>
                     <td>
                       <span :class="item.타입 === '현재 재생 중' ? 'badge-current' : 'badge-recent'">
                         {{ item.타입 }}
                       </span>
                     </td>
+                    <td><strong>{{ item.노래제목 || '제목 없음' }}</strong></td>
+                    <td>{{ item.가수 || '아티스트 없음' }}</td>
+                    <td>{{ item.장르 || 'K-Pop' }}</td>
+                    <td>{{ item.시간 || '-' }}</td>
                   </tr>
                 </tbody>
               </table>
@@ -1815,6 +2549,7 @@
 import { ref, computed, onMounted, watch, nextTick, onBeforeUnmount } from 'vue'
 import { marked } from 'marked'
 import { Network } from 'vis-network'
+import 'vis-network/styles/vis-network.min.css'
 import { useAuthStore } from './stores/auth.js'
 import LoginModal from './components/LoginModal.vue'
 import SignupModal from './components/SignupModal.vue'
@@ -1827,6 +2562,17 @@ const showSignupModal = ref(false)
 
 // 사용자 관리 모달
 const showUserManagementModal = ref(false)
+
+// 문서 라이브러리 관련
+const showDocsLibraryModal = ref(false)
+const showDocViewerModal = ref(false)
+const docsList = ref([])
+const docsLoading = ref(false)
+const docsError = ref('')
+const currentDoc = ref(null)
+const docContentHtml = ref('')
+const docContentLoading = ref(false)
+const docContentError = ref('')
 const userManagementTab = ref('profile')
 const userProfileLoading = ref(false)
 const userProfileUpdating = ref(false)
@@ -1845,6 +2591,8 @@ const dbSchemaError = ref('')
 const dockerStatus = ref(null)
 const dockerStatusLoading = ref(false)
 const dockerStatusError = ref('')
+const dockerContainerActionLoading = ref(false)
+const dockerContainerActionMessage = ref('')
 const showCreateApiKeyModal = ref(false)
 const isCreatingApiKey = ref(false)
 const createdApiKey = ref(null)
@@ -2067,13 +2815,110 @@ async function loadDbSchema() {
   }
 }
 
+// Docker 컨테이너 시작
+async function startDockerContainers() {
+  dockerContainerActionLoading.value = true
+  dockerContainerActionMessage.value = ''
+  
+  try {
+    const response = await fetch('/api/docker/start', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    })
+    
+    const data = await response.json()
+    
+    if (data.success) {
+      dockerContainerActionMessage.value = data.message || '컨테이너가 시작되었습니다.'
+      // 상태 새로고침
+      setTimeout(() => {
+        loadDockerStatus()
+      }, 2000)
+    } else {
+      dockerContainerActionMessage.value = data.error || '컨테이너 시작에 실패했습니다.'
+    }
+  } catch (error) {
+    console.error('[컨테이너 시작] 오류:', error)
+    dockerContainerActionMessage.value = `컨테이너 시작 중 오류가 발생했습니다: ${error.message}`
+  } finally {
+    dockerContainerActionLoading.value = false
+  }
+}
+
+// Docker 컨테이너 중지
+async function stopDockerContainers() {
+  dockerContainerActionLoading.value = true
+  dockerContainerActionMessage.value = ''
+  
+  try {
+    const response = await fetch('/api/docker/stop', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    })
+    
+    const data = await response.json()
+    
+    if (data.success) {
+      dockerContainerActionMessage.value = data.message || '컨테이너가 중지되었습니다.'
+      // 상태 새로고침
+      setTimeout(() => {
+        loadDockerStatus()
+      }, 2000)
+    } else {
+      dockerContainerActionMessage.value = data.error || '컨테이너 중지에 실패했습니다.'
+    }
+  } catch (error) {
+    console.error('[컨테이너 중지] 오류:', error)
+    dockerContainerActionMessage.value = `컨테이너 중지 중 오류가 발생했습니다: ${error.message}`
+  } finally {
+    dockerContainerActionLoading.value = false
+  }
+}
+
+// Docker 컨테이너 재시작
+async function restartDockerContainers() {
+  dockerContainerActionLoading.value = true
+  dockerContainerActionMessage.value = ''
+  
+  try {
+    const response = await fetch('/api/docker/restart', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    })
+    
+    const data = await response.json()
+    
+    if (data.success) {
+      dockerContainerActionMessage.value = data.message || '컨테이너가 재시작되었습니다.'
+      // 상태 새로고침
+      setTimeout(() => {
+        loadDockerStatus()
+      }, 2000)
+    } else {
+      dockerContainerActionMessage.value = data.error || '컨테이너 재시작에 실패했습니다.'
+    }
+  } catch (error) {
+    console.error('[컨테이너 재시작] 오류:', error)
+    dockerContainerActionMessage.value = `컨테이너 재시작 중 오류가 발생했습니다: ${error.message}`
+  } finally {
+    dockerContainerActionLoading.value = false
+  }
+}
+
 // Docker 상태 로드
 async function loadDockerStatus() {
   dockerStatusLoading.value = true
   dockerStatusError.value = ''
+  dockerContainerActionMessage.value = ''
   
   try {
-    const response = await fetch('http://localhost:3001/api/docker/status')
+    const response = await fetch('/api/docker/status')
     
     if (!response.ok) {
       const errorText = await response.text()
@@ -2435,7 +3280,28 @@ const showRadioHistory = ref(false)
 const showBookRecommendation = ref(false)
 const showBookHistory = ref(false)
 const showScreenValidation = ref(false)
+const showSQLQueryAnalysis = ref(false)
 const showMCPGuide = ref(false)
+
+// SQL 쿼리 분석 관련
+const sqlQueryFile = ref('')
+const sqlQueryText = ref('')
+const isAnalyzingSQL = ref(false)
+const sqlAnalysisError = ref('')
+const sqlAnalysisResult = ref(null)
+const sqlAnalysisReport = ref(null)
+const impactAnalysisResult = ref(null)
+const isAnalyzingImpact = ref(false)
+const impactAnalysisError = ref('')
+const impactTargetTable = ref('')
+const impactTargetColumn = ref('')
+const showImpactAnalysis = ref(false)
+const showLineageVisualization = ref(false)
+const lineageHtmlContent = ref('')
+const isGeneratingLineage = ref(false)
+const lineageGenerationProgress = ref(0)
+const sqlTableGraphContainer = ref(null) // SQL 테이블 관계 그래프 컨테이너
+let sqlTableGraphInstance = null // SQL 테이블 그래프 인스턴스
 const currentGuideType = ref('nodejs') // 'nodejs' 또는 'python'
 const markdownContent = ref('')
 const isLoading = ref(false)
@@ -2534,6 +3400,94 @@ const interactActions = ref([
 ])
 const interactResultSelector = ref('')
 const interactResult = ref(null)
+
+// 문서 라이브러리 열기
+const openDocsLibrary = async () => {
+  showDocsLibraryModal.value = true
+  await loadDocsList()
+}
+
+// 문서 목록 로드
+const loadDocsList = async () => {
+  docsLoading.value = true
+  docsError.value = ''
+  
+  try {
+    const response = await fetch('/api/docs/list')
+    
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+    }
+    
+    const data = await response.json()
+    
+    if (data.success) {
+      docsList.value = data.docs || []
+      docsError.value = ''
+    } else {
+      docsError.value = data.error || '문서 목록을 불러올 수 없습니다.'
+    }
+  } catch (error) {
+    console.error('[문서 목록 로드] 오류:', error)
+    docsError.value = `문서 목록을 불러오는 중 오류가 발생했습니다: ${error.message}`
+  } finally {
+    docsLoading.value = false
+  }
+}
+
+// 문서 뷰어 열기
+const openDocViewer = async (doc) => {
+  currentDoc.value = doc
+  showDocViewerModal.value = true
+  await loadDocContent(doc.name)
+}
+
+// 문서 내용 로드
+const loadDocContent = async (filename) => {
+  docContentLoading.value = true
+  docContentError.value = ''
+  docContentHtml.value = ''
+  
+  try {
+    const encodedFilename = encodeURIComponent(filename)
+    const response = await fetch(`/api/docs/content/${encodedFilename}`)
+    
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+    }
+    
+    const data = await response.json()
+    
+    if (data.success) {
+      // 마크다운을 HTML로 변환
+      docContentHtml.value = marked.parse(data.content)
+      docContentError.value = ''
+    } else {
+      docContentError.value = data.error || '문서를 불러올 수 없습니다.'
+    }
+  } catch (error) {
+    console.error('[문서 내용 로드] 오류:', error)
+    docContentError.value = `문서를 불러오는 중 오류가 발생했습니다: ${error.message}`
+  } finally {
+    docContentLoading.value = false
+  }
+}
+
+// 문서 뷰어 닫기
+const closeDocViewer = () => {
+  showDocViewerModal.value = false
+  currentDoc.value = null
+  docContentHtml.value = ''
+}
+
+// 파일 크기 포맷팅
+const formatFileSize = (bytes) => {
+  if (bytes === 0) return '0 Bytes'
+  const k = 1024
+  const sizes = ['Bytes', 'KB', 'MB', 'GB']
+  const i = Math.floor(Math.log(bytes) / Math.log(k))
+  return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i]
+}
 
 // MCP 가이드 열기
 const openMCPGuide = async () => {
@@ -2656,6 +3610,7 @@ const closeAllSections = () => {
   showBookHistory.value = false
   showNewsCollection.value = false
   showScreenValidation.value = false
+  showSQLQueryAnalysis.value = false
   
   // 데이터 초기화
   aiArticles.value = []
@@ -4379,7 +5334,11 @@ const fetchRadioSongs = async () => {
             
             fetchDetails.push({
               방송국: song.station,
-              타입: '현재 재생 중'
+              타입: '현재 재생 중',
+              노래제목: song.title,
+              가수: song.artist,
+              장르: song.genre,
+              시간: song.time || now.toLocaleTimeString('ko-KR')
             })
           }
         } else {
@@ -4404,7 +5363,11 @@ const fetchRadioSongs = async () => {
               
               fetchDetails.push({
                 방송국: stationNames[station],
-                타입: '최근 재생'
+                타입: '최근 재생',
+                노래제목: songData.title,
+                가수: songData.artist,
+                장르: songData.genre,
+                시간: now.toLocaleTimeString('ko-KR')
               })
             })
           }
@@ -4432,7 +5395,11 @@ const fetchRadioSongs = async () => {
           allSongs.push(song)
           fetchDetails.push({
             방송국: song.station,
-            타입: '현재 재생 중'
+            타입: '현재 재생 중',
+            노래제목: song.title,
+            가수: song.artist,
+            장르: song.genre,
+            시간: song.time || now.toLocaleTimeString('ko-KR')
           })
         }
         if (stationData && stationData.recentSongs) {
@@ -4447,7 +5414,11 @@ const fetchRadioSongs = async () => {
             allSongs.push(songData)
             fetchDetails.push({
               방송국: stationData.name,
-              타입: '최근 재생'
+              타입: '최근 재생',
+              노래제목: songData.title,
+              가수: songData.artist,
+              장르: songData.genre,
+              시간: now.toLocaleTimeString('ko-KR')
             })
           })
         }
@@ -4469,7 +5440,11 @@ const fetchRadioSongs = async () => {
         allSongs.push(song)
         fetchDetails.push({
           방송국: song.station,
-          타입: '현재 재생 중'
+          타입: '현재 재생 중',
+          노래제목: song.title,
+          가수: song.artist,
+          장르: song.genre,
+          시간: song.time || now.toLocaleTimeString('ko-KR')
         })
       }
       if (station.recentSongs) {
@@ -4484,7 +5459,11 @@ const fetchRadioSongs = async () => {
           allSongs.push(songData)
           fetchDetails.push({
             방송국: station.name,
-            타입: '최근 재생'
+            타입: '최근 재생',
+            노래제목: songData.title,
+            가수: songData.artist,
+            장르: songData.genre,
+            시간: now.toLocaleTimeString('ko-KR')
           })
         })
       }
@@ -5195,6 +6174,926 @@ const toggleScreenValidation = () => {
 }
 
 /**
+ * SQL 쿼리 분석 섹션 토글 함수
+ * 
+ * 기능:
+ * - 다른 모든 섹션을 닫고 SQL 쿼리 분석 섹션만 열기
+ */
+const toggleSQLQueryAnalysis = () => {
+  closeAllSections()
+  showSQLQueryAnalysis.value = true
+}
+
+/**
+ * SQL 쿼리 분석 함수
+ * 
+ * 기능:
+ * - MCP 서버를 통해 SQL 쿼리 분석 수행
+ */
+const analyzeSQLQuery = async () => {
+  if (!sqlQueryText.value.trim() && !sqlQueryFile.value.trim()) {
+    sqlAnalysisError.value = 'SQL 쿼리 또는 파일 경로를 입력해주세요.'
+    return
+  }
+  
+  isAnalyzingSQL.value = true
+  sqlAnalysisError.value = ''
+  sqlAnalysisResult.value = null
+  
+  try {
+    // MCP 서버를 통해 쿼리 분석 (API 서버를 통한 프록시)
+    const requestBody = {
+      query_file: sqlQueryFile.value.trim() || null,
+      query_text: sqlQueryText.value.trim() || null,
+      output_format: 'both'
+    }
+    
+    console.log('[프론트엔드] SQL 쿼리 분석 요청:', requestBody)
+    
+    // 큰 파일 처리를 위한 타임아웃 설정 (5분)
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 300000) // 5분 타임아웃
+    
+    const response = await fetch('/api/sql/analyze', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(requestBody),
+      signal: controller.signal
+    }).finally(() => {
+      clearTimeout(timeoutId)
+    })
+    
+    console.log('[프론트엔드] 응답 상태:', response.status, response.statusText)
+    
+    if (!response.ok) {
+      let errorData
+      try {
+        errorData = await response.json()
+      } catch (e) {
+        errorData = { error: `서버 오류 (${response.status} ${response.statusText})` }
+      }
+      throw new Error(errorData.error || `서버 오류 (${response.status})`)
+    }
+    
+    const data = await response.json()
+    console.log('[프론트엔드] 분석 결과:', data.success ? '성공' : '실패')
+    
+    if (data.success) {
+      sqlAnalysisResult.value = data.result
+      sqlAnalysisReport.value = data.report
+      
+      // 디버깅: lineage 데이터 확인
+      console.log('[프론트엔드] 분석 결과 데이터:', {
+        hasLineage: !!data.result.lineage,
+        lineage: data.result.lineage,
+        joinRelationships: data.result.lineage?.join_relationships?.length || 0,
+        hasReport: !!data.report,
+        reportKeys: data.report ? Object.keys(data.report) : [],
+        hasLineageHtmlPath: data.report ? data.report.hasOwnProperty('lineageHtmlPath') : false,
+        lineageHtmlPath: data.report?.lineageHtmlPath,
+        lineageHtmlPathType: typeof data.report?.lineageHtmlPath,
+        reportStringified: data.report ? JSON.stringify(data.report).substring(0, 300) : 'null'
+      })
+      
+      // 리포트에 경로 저장 (나중에 사용하기 위해)
+      if (data.report) {
+        // 리포트 객체를 깊은 복사하여 저장
+        sqlAnalysisReport.value = JSON.parse(JSON.stringify(data.report))
+        console.log('[프론트엔드] 리포트 저장 완료:', {
+          reportKeys: Object.keys(sqlAnalysisReport.value),
+          hasLineageHtmlPath: sqlAnalysisReport.value.hasOwnProperty('lineageHtmlPath'),
+          lineageHtmlPath: sqlAnalysisReport.value.lineageHtmlPath,
+          lineageHtmlPathType: typeof sqlAnalysisReport.value.lineageHtmlPath,
+          reportStringified: JSON.stringify(sqlAnalysisReport.value).substring(0, 300)
+        })
+      } else {
+        console.error('[프론트엔드] 리포트가 없습니다!')
+        console.error('[프론트엔드] 전체 응답 데이터:', data)
+      }
+      
+      // 리니지 HTML 파일이 있으면 자동으로 로드
+      if (data.report && data.report.lineageHtmlPath) {
+        console.log('[프론트엔드] 초기 응답에서 리니지 경로 발견:', data.report.lineageHtmlPath)
+        isGeneratingLineage.value = false
+        lineageGenerationProgress.value = 100
+        await loadLineageVisualization(data.report.lineageHtmlPath)
+      } else {
+        // 리니지 HTML 파일이 없으면 생성 중 표시
+        console.log('[프론트엔드] 리니지 HTML 파일 없음, 생성 대기 시작')
+        isGeneratingLineage.value = true
+        lineageGenerationProgress.value = 50
+        // 리니지 파일 생성 대기 (최대 15초)
+        await waitForLineageFile()
+      }
+      
+      // 테이블 관계 그래프 렌더링
+      await nextTick()
+      // DOM이 완전히 렌더링될 때까지 대기
+      setTimeout(() => {
+        if (data.result.lineage && data.result.lineage.join_relationships && data.result.lineage.join_relationships.length > 0) {
+          console.log('[프론트엔드] 그래프 렌더링 시작')
+          renderSQLTableGraph(data.result.lineage)
+        } else {
+          console.warn('[프론트엔드] 그래프 렌더링 불가:', {
+            hasLineage: !!data.result.lineage,
+            hasJoinRelationships: !!data.result.lineage?.join_relationships,
+            joinRelationshipsLength: data.result.lineage?.join_relationships?.length || 0
+          })
+        }
+      }, 100)
+    } else {
+      sqlAnalysisError.value = data.error || '쿼리 분석에 실패했습니다.'
+    }
+  } catch (error) {
+    console.error('SQL 쿼리 분석 오류:', error)
+    console.error('오류 상세:', error.stack)
+    
+    // 네트워크 오류인 경우 더 자세한 메시지 제공
+    if (error.message === 'Failed to fetch' || error.name === 'TypeError') {
+      sqlAnalysisError.value = `API 서버에 연결할 수 없습니다. API 서버가 실행 중인지 확인하세요. (포트 3001)\n\n오류: ${error.message}`
+    } else {
+      sqlAnalysisError.value = `쿼리 분석 중 오류가 발생했습니다: ${error.message}`
+    }
+  } finally {
+    isAnalyzingSQL.value = false
+  }
+}
+
+/**
+ * 영향도 분석 함수
+ */
+const analyzeImpact = async () => {
+  if (!impactTargetTable.value.trim()) {
+    impactAnalysisError.value = '분석 대상 테이블을 선택해주세요.'
+    return
+  }
+  
+  if (!sqlQueryFile.value.trim() && !sqlQueryText.value.trim()) {
+    impactAnalysisError.value = 'SQL 쿼리 또는 파일 경로가 필요합니다.'
+    return
+  }
+  
+  isAnalyzingImpact.value = true
+  impactAnalysisError.value = ''
+  impactAnalysisResult.value = null
+  
+  try {
+    const requestBody = {
+      query_file: sqlQueryFile.value.trim() || null,
+      query_text: sqlQueryText.value.trim() || null,
+      target_table: impactTargetTable.value.trim(),
+      target_column: impactTargetColumn.value.trim() || null
+    }
+    
+    console.log('[프론트엔드] 영향도 분석 요청:', requestBody)
+    
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 120000) // 2분 타임아웃
+    
+    const response = await fetch('/api/sql/impact-analysis', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(requestBody),
+      signal: controller.signal
+    }).finally(() => {
+      clearTimeout(timeoutId)
+    })
+    
+    if (!response.ok) {
+      let errorData
+      try {
+        errorData = await response.json()
+      } catch (e) {
+        errorData = { error: `서버 오류 (${response.status} ${response.statusText})` }
+      }
+      throw new Error(errorData.error || `서버 오류 (${response.status})`)
+    }
+    
+    const data = await response.json()
+    console.log('[프론트엔드] 영향도 분석 결과:', data.success ? '성공' : '실패')
+    
+    if (data.success) {
+      impactAnalysisResult.value = data.impact_analysis
+      showImpactAnalysis.value = true
+    } else {
+      throw new Error(data.error || '영향도 분석 실패')
+    }
+  } catch (error) {
+    console.error('[프론트엔드] 영향도 분석 오류:', error)
+    impactAnalysisError.value = `영향도 분석 중 오류가 발생했습니다: ${error.message}`
+  } finally {
+    isAnalyzingImpact.value = false
+  }
+}
+
+/**
+ * 영향도 분석 초기화 함수
+ */
+const clearImpactAnalysis = () => {
+  impactAnalysisResult.value = null
+  impactAnalysisError.value = ''
+  impactTargetTable.value = ''
+  impactTargetColumn.value = ''
+  showImpactAnalysis.value = false
+}
+
+/**
+ * 영향도 수준에 따른 CSS 클래스 반환
+ */
+const getImpactLevelClass = (level) => {
+  const levelLower = level?.toLowerCase() || ''
+  if (levelLower === 'critical') return 'impact-critical'
+  if (levelLower === 'high') return 'impact-high'
+  if (levelLower === 'medium') return 'impact-medium'
+  if (levelLower === 'low') return 'impact-low'
+  return ''
+}
+
+/**
+ * SQL 분석 결과 초기화 함수
+ */
+const clearSQLAnalysis = () => {
+  sqlQueryFile.value = ''
+  sqlQueryText.value = ''
+  sqlAnalysisError.value = ''
+  sqlAnalysisResult.value = null
+  sqlAnalysisReport.value = null
+  showLineageVisualization.value = false
+  clearImpactAnalysis()
+  
+  // 그래프 인스턴스 제거
+  if (sqlTableGraphInstance) {
+    sqlTableGraphInstance.destroy()
+    sqlTableGraphInstance = null
+  }
+}
+
+/**
+ * SQL 테이블 관계 그래프 렌더링 함수
+ * 
+ * 기능:
+ * - lineage 데이터를 vis-network 형식으로 변환하여 그래프 렌더링
+ * - 테이블 간 JOIN 관계를 시각화
+ */
+const renderSQLTableGraph = (lineage) => {
+  console.log('[그래프 렌더링] 시작', { 
+    container: !!sqlTableGraphContainer.value, 
+    lineage: !!lineage,
+    joinRelationships: lineage?.join_relationships?.length 
+  })
+  
+  if (!sqlTableGraphContainer.value) {
+    console.warn('[그래프 렌더링] 컨테이너가 없습니다')
+    return
+  }
+  
+  if (!lineage) {
+    console.warn('[그래프 렌더링] lineage 데이터가 없습니다')
+    return
+  }
+  
+  // JOIN 관계가 없어도 테이블 목록만이라도 표시
+  const hasJoinRelationships = lineage.join_relationships && lineage.join_relationships.length > 0
+  if (!hasJoinRelationships) {
+    console.warn('[그래프 렌더링] JOIN 관계가 없습니다. 테이블 목록만 표시합니다.')
+  }
+  
+  // 기존 인스턴스 제거
+  if (sqlTableGraphInstance) {
+    sqlTableGraphInstance.destroy()
+    sqlTableGraphInstance = null
+  }
+  
+  const nodes = []
+  const edges = []
+  const nodeMap = new Map()
+  
+  // 테이블 노드 생성
+  if (lineage.tables && lineage.tables.length > 0) {
+    lineage.tables.forEach((table, index) => {
+      const nodeId = `table_${index}`
+      nodeMap.set(table, nodeId)
+      nodes.push({
+        id: nodeId,
+        label: table,
+        color: {
+          background: '#4a90e2',
+          border: '#357abd',
+          highlight: {
+            background: '#5ba3f5',
+            border: '#4a90e2'
+          }
+        },
+        font: {
+          color: '#ffffff',
+          size: 14,
+          face: 'Arial'
+        },
+        shape: 'box',
+        margin: 10
+      })
+    })
+  }
+  
+  // CTE 노드 생성
+  if (lineage.ctes && lineage.ctes.length > 0) {
+    lineage.ctes.forEach((cte, index) => {
+      const nodeId = `cte_${index}`
+      nodeMap.set(cte, nodeId)
+      nodes.push({
+        id: nodeId,
+        label: cte,
+        color: {
+          background: '#f5576c',
+          border: '#d32f2f',
+          highlight: {
+            background: '#ff6b7a',
+            border: '#f5576c'
+          }
+        },
+        font: {
+          color: '#ffffff',
+          size: 14,
+          face: 'Arial'
+        },
+        shape: 'ellipse',
+        margin: 10
+      })
+    })
+  }
+  
+  // JOIN 관계 엣지 생성
+  if (lineage.join_relationships && lineage.join_relationships.length > 0) {
+    lineage.join_relationships.forEach((join, index) => {
+      const leftTable = join.left_table || 'unknown'
+      const rightTable = join.right_table || 'unknown'
+      const joinType = join.join_type || 'JOIN'
+      
+      const leftNodeId = nodeMap.get(leftTable) || `unknown_${index}_left`
+      const rightNodeId = nodeMap.get(rightTable) || `unknown_${index}_right`
+      
+      // 알 수 없는 테이블인 경우 노드 추가
+      if (!nodeMap.has(leftTable) && leftTable !== 'unknown') {
+        const nodeId = `unknown_${index}_left`
+        nodeMap.set(leftTable, nodeId)
+        nodes.push({
+          id: nodeId,
+          label: leftTable,
+          color: {
+            background: '#9e9e9e',
+            border: '#757575',
+            highlight: {
+              background: '#bdbdbd',
+              border: '#9e9e9e'
+            }
+          },
+          font: {
+            color: '#ffffff',
+            size: 12,
+            face: 'Arial'
+          },
+          shape: 'box',
+          margin: 8
+        })
+      }
+      
+      if (!nodeMap.has(rightTable) && rightTable !== 'unknown') {
+        const nodeId = `unknown_${index}_right`
+        nodeMap.set(rightTable, nodeId)
+        nodes.push({
+          id: nodeId,
+          label: rightTable,
+          color: {
+            background: '#9e9e9e',
+            border: '#757575',
+            highlight: {
+              background: '#bdbdbd',
+              border: '#9e9e9e'
+            }
+          },
+          font: {
+            color: '#ffffff',
+            size: 12,
+            face: 'Arial'
+          },
+          shape: 'box',
+          margin: 8
+        })
+      }
+      
+      // JOIN 타입에 따른 스타일 설정
+      let edgeColor = '#4a90e2'
+      let edgeStyle = 'solid'
+      let edgeWidth = 2
+      
+      if (joinType.includes('LEFT')) {
+        edgeColor = '#4a90e2'
+        edgeStyle = 'solid'
+      } else if (joinType.includes('INNER')) {
+        edgeColor = '#f5576c'
+        edgeStyle = 'solid'
+      } else if (joinType.includes('FULL OUTER') || joinType.includes('OUTER')) {
+        edgeColor = '#4a90e2'
+        edgeStyle = 'dashed'
+      } else if (joinType.includes('RIGHT')) {
+        edgeColor = '#ff9800'
+        edgeStyle = 'solid'
+      }
+      
+      edges.push({
+        from: nodeMap.get(leftTable) || leftNodeId,
+        to: nodeMap.get(rightTable) || rightNodeId,
+        label: joinType,
+        color: {
+          color: edgeColor,
+          highlight: edgeColor,
+          hover: edgeColor
+        },
+        dashes: edgeStyle === 'dashed',
+        width: edgeWidth,
+        arrows: {
+          to: {
+            enabled: true,
+            scaleFactor: 0.8
+          }
+        },
+        font: {
+          color: '#666',
+          size: 10,
+          align: 'middle'
+        },
+        smooth: {
+          type: 'curvedCW',
+          roundness: 0.2
+        }
+      })
+    })
+  }
+  
+  // 그래프 데이터 설정
+  const graphData = {
+    nodes: nodes,
+    edges: edges
+  }
+  
+  // 네트워크 옵션 설정
+  const options = {
+    nodes: {
+      borderWidth: 2,
+      shadow: true,
+      font: {
+        size: 14,
+        face: 'Arial'
+      }
+    },
+    edges: {
+      width: 2,
+      shadow: true,
+      smooth: {
+        type: 'curvedCW',
+        roundness: 0.2
+      },
+      font: {
+        size: 10,
+        align: 'middle'
+      }
+    },
+    physics: {
+      enabled: true,
+      stabilization: {
+        enabled: true,
+        iterations: 200
+      },
+      barnesHut: {
+        gravitationalConstant: -2000,
+        centralGravity: 0.1,
+        springLength: 200,
+        springConstant: 0.04,
+        damping: 0.09
+      }
+    },
+    interaction: {
+      hover: true,
+      tooltipDelay: 100,
+      zoomView: true,
+      dragView: true
+    },
+    layout: {
+      improvedLayout: true,
+      hierarchical: {
+        enabled: false
+      }
+    }
+  }
+  
+  // 네트워크 생성
+  sqlTableGraphInstance = new Network(sqlTableGraphContainer.value, graphData, options)
+  
+  // 노드 클릭 이벤트 - 영향도 분석 트리거
+  sqlTableGraphInstance.on('click', function(params) {
+    if (params.nodes.length > 0) {
+      const nodeId = params.nodes[0]
+      const node = nodes.find(n => n.id === nodeId)
+      if (node && node.label) {
+        // 테이블명 추출 (CTE 표시 제거)
+        const tableName = node.label.replace(' (CTE)', '').trim()
+        
+        // 영향도 분석을 위한 테이블 선택
+        impactTargetTable.value = tableName
+        impactTargetColumn.value = ''
+        
+        // 영향도 분석 자동 실행
+        console.log('[리니지 시각화] 노드 클릭 - 영향도 분석 트리거:', tableName)
+        analyzeImpact()
+      }
+    }
+  })
+  
+  // 네트워크 생성
+  try {
+    sqlTableGraphInstance = new Network(sqlTableGraphContainer.value, graphData, options)
+    console.log('[그래프 렌더링] 성공', { nodes: nodes.length, edges: edges.length })
+    
+    // 이벤트 리스너 추가 - 노드 클릭 시 영향도 분석 트리거
+    sqlTableGraphInstance.on('click', (params) => {
+      if (params.nodes.length > 0) {
+        const nodeId = params.nodes[0]
+        const node = nodes.find(n => n.id === nodeId)
+        if (node && node.label) {
+          // 테이블명 추출 (CTE 표시 제거)
+          const tableName = node.label.replace(' (CTE)', '').trim()
+          
+          console.log('[리니지 시각화] 노드 클릭 - 영향도 분석 트리거:', tableName)
+          
+          // 영향도 분석을 위한 테이블 선택
+          impactTargetTable.value = tableName
+          impactTargetColumn.value = ''
+          
+          // 영향도 분석 자동 실행
+          analyzeImpact()
+          
+          // 영향도 분석 섹션으로 스크롤
+          setTimeout(() => {
+            const impactSection = document.querySelector('.impact-analysis-section')
+            if (impactSection) {
+              impactSection.scrollIntoView({ behavior: 'smooth', block: 'start' })
+            }
+          }, 500)
+        }
+      }
+    })
+  } catch (error) {
+    console.error('[그래프 렌더링] 오류:', error)
+  }
+}
+
+// SQL 분석 결과가 변경될 때 그래프 자동 렌더링
+watch(() => sqlAnalysisResult.value?.lineage, async (lineage) => {
+  console.log('[Watch] lineage 변경 감지:', {
+    hasLineage: !!lineage,
+    lineage: lineage,
+    joinRelationships: lineage?.join_relationships?.length || 0
+  })
+  
+  if (lineage) {
+    await nextTick()
+    setTimeout(() => {
+      console.log('[Watch] 그래프 렌더링 시도')
+      renderSQLTableGraph(lineage)
+    }, 300)
+  }
+}, { deep: true, immediate: true })
+
+/**
+ * JOIN 타입에 따른 CSS 클래스 반환
+ */
+const getJoinTypeClass = (joinType) => {
+  if (!joinType) return ''
+  const type = joinType.toUpperCase()
+  if (type.includes('LEFT')) return 'join-type-left'
+  if (type.includes('INNER')) return 'join-type-inner'
+  if (type.includes('FULL OUTER') || type.includes('OUTER')) return 'join-type-outer'
+  if (type.includes('RIGHT')) return 'join-type-right'
+  return 'join-type-default'
+}
+
+/**
+ * 점수에 따른 CSS 클래스 반환
+ */
+const getScoreClass = (score, isComplexity = false) => {
+  if (score === null || score === undefined) return ''
+  
+  if (isComplexity) {
+    // 복잡도는 높을수록 나쁨
+    if (score >= 70) return 'score-very-high'
+    if (score >= 50) return 'score-high'
+    if (score >= 30) return 'score-medium'
+    return 'score-low'
+  } else {
+    // 성능, 보안은 높을수록 좋음
+    if (score >= 80) return 'score-excellent'
+    if (score >= 60) return 'score-good'
+    if (score >= 40) return 'score-medium'
+    return 'score-low'
+  }
+}
+
+/**
+ * SQL 리포트 다운로드 함수
+ */
+const downloadSQLReport = (format) => {
+  if (!sqlAnalysisReport.value) {
+    alert('다운로드할 리포트가 없습니다.')
+    return
+  }
+  
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5)
+  const filename = `sql_analysis_${timestamp}.${format === 'json' ? 'json' : 'md'}`
+  
+  let content = ''
+  let mimeType = ''
+  
+  if (format === 'json') {
+    content = JSON.stringify(sqlAnalysisReport.value, null, 2)
+    mimeType = 'application/json'
+  } else {
+    content = sqlAnalysisReport.value.markdown || ''
+    mimeType = 'text/markdown'
+  }
+  
+  const blob = new Blob([content], { type: mimeType })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = filename
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
+  URL.revokeObjectURL(url)
+}
+
+/**
+ * 리니지 파일 생성 대기 함수
+ */
+const waitForLineageFile = async () => {
+  const maxWaitTime = 15000 // 15초
+  const checkInterval = 1000 // 1초마다 확인
+  const startTime = Date.now()
+  
+  // 초기 프로그레스 설정
+  lineageGenerationProgress.value = 30
+  
+  while (Date.now() - startTime < maxWaitTime) {
+    await new Promise(resolve => setTimeout(resolve, checkInterval))
+    
+    const elapsed = Date.now() - startTime
+    const progress = Math.min(30 + (elapsed / maxWaitTime * 60), 90)
+    lineageGenerationProgress.value = progress
+    
+    // 주기적으로 파일 확인 (3초마다)
+    if (elapsed % 3000 < checkInterval) {
+      try {
+        // 리니지 파일이 생성되었는지 확인
+        const queryFile = sqlQueryFile.value || null
+        const queryText = sqlQueryText.value || null
+        
+        if (queryFile || queryText) {
+          // 간단한 파일 확인: 같은 쿼리로 다시 분석 요청하여 파일 경로 확인
+          const checkResponse = await fetch('/api/sql/analyze', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              query_file: queryFile,
+              query_text: queryText,
+              output_format: 'json'
+            })
+          })
+          
+          if (checkResponse.ok) {
+            const checkData = await checkResponse.json()
+            if (checkData.report && checkData.report.lineageHtmlPath) {
+              // 파일이 생성되었으면 로드
+              isGeneratingLineage.value = false
+              lineageGenerationProgress.value = 100
+              // 리포트 업데이트
+              if (!sqlAnalysisReport.value) {
+                sqlAnalysisReport.value = {}
+              }
+              sqlAnalysisReport.value.lineageHtmlPath = checkData.report.lineageHtmlPath
+              console.log('[프론트엔드] 리니지 파일 찾음, 로드 시작:', checkData.report.lineageHtmlPath)
+              await loadLineageVisualization(checkData.report.lineageHtmlPath)
+              return
+            } else {
+              // 리포트 업데이트 (경로가 없어도 리포트는 저장)
+              if (checkData.report) {
+                if (!sqlAnalysisReport.value) {
+                  sqlAnalysisReport.value = {}
+                }
+                Object.assign(sqlAnalysisReport.value, checkData.report)
+              }
+            }
+          }
+        }
+      } catch (error) {
+        console.warn('[프론트엔드] 리니지 파일 확인 중 오류:', error)
+      }
+    }
+  }
+  
+  // 타임아웃 전 마지막 확인 - 리포트에 이미 경로가 있을 수 있음
+  console.log('[프론트엔드] 타임아웃 전 마지막 확인 시도')
+  console.log('[프론트엔드] 현재 리포트 상태:', {
+    hasReport: !!sqlAnalysisReport.value,
+    reportKeys: sqlAnalysisReport.value ? Object.keys(sqlAnalysisReport.value) : [],
+    lineageHtmlPath: sqlAnalysisReport.value?.lineageHtmlPath
+  })
+  
+  if (sqlAnalysisReport.value && sqlAnalysisReport.value.lineageHtmlPath) {
+    console.log('[프론트엔드] 리포트에서 리니지 경로 발견:', sqlAnalysisReport.value.lineageHtmlPath)
+    isGeneratingLineage.value = false
+    lineageGenerationProgress.value = 100
+    await loadLineageVisualization(sqlAnalysisReport.value.lineageHtmlPath)
+    return
+  }
+  
+  // 타임아웃 - 프로그레스는 100%로 유지하고 버튼 표시
+  isGeneratingLineage.value = false
+  lineageGenerationProgress.value = 100
+  console.warn('[프론트엔드] 리니지 파일 생성 타임아웃')
+  console.warn('[프론트엔드] 리포트 상태:', {
+    hasReport: !!sqlAnalysisReport.value,
+    reportContent: sqlAnalysisReport.value
+  })
+  
+  // 리포트에 경로가 있으면 시도 (타임아웃 후에도)
+  if (sqlAnalysisReport.value && sqlAnalysisReport.value.lineageHtmlPath) {
+    console.log('[프론트엔드] 리포트 경로로 재시도:', sqlAnalysisReport.value.lineageHtmlPath)
+    await loadLineageVisualization(sqlAnalysisReport.value.lineageHtmlPath)
+  } else {
+    console.warn('[프론트엔드] 리포트에 리니지 경로가 없습니다.')
+    console.warn('[프론트엔드] 리포트 내용:', sqlAnalysisReport.value)
+    // 리포트가 없거나 경로가 없으면 사용자에게 알림
+    if (!sqlAnalysisReport.value) {
+      console.error('[프론트엔드] 리포트 자체가 없습니다!')
+    } else if (!sqlAnalysisReport.value.lineageHtmlPath) {
+      console.error('[프론트엔드] 리포트에 lineageHtmlPath 필드가 없습니다.')
+    }
+  }
+}
+
+/**
+ * 리니지 HTML 내용 로드 함수
+ */
+const loadLineageVisualization = async (htmlPath) => {
+  if (!htmlPath) {
+    console.warn('[프론트엔드] 리니지 HTML 경로가 없습니다.')
+    return
+  }
+  
+  try {
+    let fileUrl = htmlPath.replace(/\\/g, '/')
+    
+    // API 엔드포인트인 경우 (/api/lineage/로 시작)
+    if (fileUrl.startsWith('/api/lineage/')) {
+      fileUrl = `${window.location.origin}${fileUrl}`
+    }
+    // 상대 경로인 경우 현재 페이지의 base URL 사용
+    else if (!fileUrl.startsWith('http://') && !fileUrl.startsWith('https://')) {
+      if (fileUrl.startsWith('/')) {
+        fileUrl = `${window.location.origin}${fileUrl}`
+      } else {
+        // 상대 경로를 API 엔드포인트로 변환
+        fileUrl = `${window.location.origin}/api/lineage/${fileUrl}`
+      }
+    }
+    
+    console.log('[프론트엔드] 리니지 HTML 로드 시도:', fileUrl)
+    
+    const response = await fetch(fileUrl)
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+    }
+    
+    const htmlContent = await response.text()
+    if (!htmlContent || htmlContent.trim().length === 0) {
+      throw new Error('HTML 내용이 비어있습니다.')
+    }
+    
+    lineageHtmlContent.value = htmlContent
+    showLineageVisualization.value = true
+    console.log('[프론트엔드] 리니지 HTML 로드 성공, 시각화 표시')
+    
+    // 시각화가 열릴 때 스크롤
+    setTimeout(() => {
+      const container = document.querySelector('.lineage-visualization-container')
+      if (container) {
+        container.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      }
+    }, 300)
+  } catch (error) {
+    console.error('[프론트엔드] 리니지 HTML 로드 실패:', error)
+    console.error('[프론트엔드] 실패한 경로:', htmlPath)
+    // 에러가 발생해도 버튼은 표시되도록 함 (사용자가 수동으로 시도할 수 있도록)
+    showLineageVisualization.value = false
+    // 프로그레스는 유지하여 버튼이 표시되도록 함
+    isGeneratingLineage.value = false
+  }
+}
+
+/**
+ * 리니지 연관도 계산 함수
+ */
+const calculateLineageConnectivity = () => {
+  if (!sqlAnalysisResult.value || !sqlAnalysisResult.value.lineage) {
+    return 0
+  }
+  
+  const lineage = sqlAnalysisResult.value.lineage
+  const tableCount = lineage.tables?.length || 0
+  const cteCount = lineage.ctes?.length || 0
+  const joinCount = lineage.join_relationships?.length || 0
+  const totalNodes = tableCount + cteCount
+  
+  if (totalNodes === 0) {
+    return 0
+  }
+  
+  // 최대 가능한 JOIN 수 = n * (n-1) / 2 (완전 연결 그래프)
+  const maxPossibleJoins = totalNodes * (totalNodes - 1) / 2
+  
+  if (maxPossibleJoins === 0) {
+    return 0
+  }
+  
+  // 실제 JOIN 수를 최대 가능한 JOIN 수로 나눈 비율
+  const connectivity = Math.round((joinCount / maxPossibleJoins) * 100)
+  
+  return Math.min(connectivity, 100) // 최대 100%
+}
+
+/**
+ * 리니지 연관도 클래스 반환
+ */
+const getConnectivityClass = (connectivity) => {
+  if (connectivity >= 75) {
+    return 'connectivity-high'
+  } else if (connectivity >= 50) {
+    return 'connectivity-medium'
+  } else if (connectivity >= 30) {
+    return 'connectivity-low-medium'
+  } else {
+    return 'connectivity-low'
+  }
+}
+
+/**
+ * 리니지 시각화로 스크롤
+ */
+const scrollToLineageVisualization = async () => {
+  if (!sqlAnalysisReport.value || !sqlAnalysisReport.value.lineageHtmlPath) {
+    alert('리니지 리포트 파일을 찾을 수 없습니다.')
+    return
+  }
+  
+  // 리니지 시각화가 닫혀있으면 열기
+  if (!showLineageVisualization.value) {
+    await loadLineageVisualization(sqlAnalysisReport.value.lineageHtmlPath)
+  }
+  
+  // 시각화 영역으로 스크롤
+  setTimeout(() => {
+    const container = document.querySelector('.lineage-visualization-container')
+    if (container) {
+      container.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }
+  }, 300)
+}
+
+/**
+ * 리니지 시각화 토글 함수
+ */
+const toggleLineageVisualization = async () => {
+  if (!sqlAnalysisReport.value || !sqlAnalysisReport.value.lineageHtmlPath) {
+    alert('리니지 리포트 파일을 찾을 수 없습니다.')
+    return
+  }
+  
+  // 닫기
+  if (showLineageVisualization.value) {
+    showLineageVisualization.value = false
+    lineageHtmlContent.value = ''
+    return
+  }
+  
+  // 열기 - HTML 내용 로드
+  await loadLineageVisualization(sqlAnalysisReport.value.lineageHtmlPath)
+}
+
+/**
  * 화면 검증 함수
  * 
  * 기능:
@@ -5808,6 +7707,24 @@ onMounted(() => {
   transform: translateY(0);
 }
 
+.btn-docs-library {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+  transition: all 0.3s ease;
+  box-shadow: 0 2px 4px rgba(102, 126, 234, 0.3);
+}
+
+.btn-docs-library:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+}
+
 .btn-guide {
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   color: white;
@@ -5928,7 +7845,7 @@ onMounted(() => {
 .main-features-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 1.5rem;
+  gap: 1rem;
   align-items: start;
   max-width: 100%;
   margin: 0;
@@ -5937,23 +7854,23 @@ onMounted(() => {
 @media (max-width: 1600px) {
   .main-features-grid {
     grid-template-columns: repeat(2, 1fr);
-    gap: 1.5rem;
+    gap: 1rem;
   }
 }
 
 @media (max-width: 1000px) {
   .main-features-grid {
     grid-template-columns: 1fr;
-    gap: 1.5rem;
+    gap: 1rem;
   }
 }
 
 /* 기사 검색 섹션 (바운더리로 묶음) */
 .article-search-section {
-  padding: 1.5rem;
+  padding: 1rem;
   background: linear-gradient(135deg, #ffffff 0%, #f5f7fa 50%, #e8ecf1 100%);
-  border-radius: 20px;
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.08), 0 0 0 1px rgba(0, 0, 0, 0.05);
+  border-radius: 16px;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.08), 0 0 0 1px rgba(0, 0, 0, 0.05);
   border: 2px solid rgba(255, 255, 255, 0.8);
   position: relative;
   overflow: hidden;
@@ -5971,35 +7888,35 @@ onMounted(() => {
 }
 
 .section-header {
-  margin-bottom: 1rem;
+  margin-bottom: 0.75rem;
   text-align: center;
 }
 
 .section-header h2 {
   color: #2c3e50;
-  font-size: 1.4rem;
-  margin-bottom: 0.3rem;
+  font-size: 1.2rem;
+  margin-bottom: 0.25rem;
   font-weight: 700;
 }
 
 .section-description {
   color: #666;
-  font-size: 13px;
+  font-size: 12px;
   margin: 0;
 }
 
 .article-search-buttons {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
-  margin-top: 1rem;
+  gap: 0.75rem;
+  margin-top: 0.75rem;
 }
 
 .feature-buttons {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
-  margin-top: 1rem;
+  gap: 0.75rem;
+  margin-top: 0.75rem;
 }
 
 /* 버튼 그룹 카드 */
@@ -6010,11 +7927,11 @@ onMounted(() => {
 
 .button-group-card .btn {
   width: 100%;
-  padding: 20px 24px;
-  border-radius: 14px;
+  padding: 14px 18px;
+  border-radius: 12px;
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 12px;
   text-align: left;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   position: relative;
@@ -6045,7 +7962,7 @@ onMounted(() => {
 }
 
 .button-icon {
-  font-size: 2rem;
+  font-size: 1.5rem;
   line-height: 1;
   flex-shrink: 0;
   filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.2));
@@ -6056,15 +7973,15 @@ onMounted(() => {
 }
 
 .button-title {
-  font-size: 18px;
+  font-size: 15px;
   font-weight: 700;
-  margin-bottom: 3px;
+  margin-bottom: 2px;
   color: white;
   line-height: 1.3;
 }
 
 .button-subtitle {
-  font-size: 12px;
+  font-size: 11px;
   color: rgba(255, 255, 255, 0.85);
   font-weight: 400;
   line-height: 1.4;
@@ -6120,10 +8037,10 @@ onMounted(() => {
 
 /* 도서 기능 섹션 */
 .book-features-section {
-  padding: 1.5rem;
+  padding: 1rem;
   background: linear-gradient(135deg, #ffffff 0%, #f0f8ff 50%, #e6f3ff 100%);
-  border-radius: 20px;
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.08), 0 0 0 1px rgba(0, 0, 0, 0.05);
+  border-radius: 16px;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.08), 0 0 0 1px rgba(0, 0, 0, 0.05);
   border: 2px solid rgba(255, 255, 255, 0.8);
   position: relative;
   overflow: hidden;
@@ -6219,6 +8136,80 @@ onMounted(() => {
   background: linear-gradient(135deg, rgba(255, 255, 255, 0.35) 0%, rgba(255, 255, 255, 0.25) 100%);
   box-shadow: 
     0 6px 20px rgba(102, 126, 234, 0.6),
+    inset 0 2px 4px rgba(255, 255, 255, 0.3),
+    inset 0 -2px 4px rgba(0, 0, 0, 0.1);
+  border-color: rgba(255, 255, 255, 0.7);
+}
+
+/* SQL 쿼리 분석 섹션 */
+.sql-query-analysis-section {
+  padding: 2rem;
+  background: linear-gradient(135deg, #4a90e2 0%, #357abd 50%, #2e5c8a 100%);
+  border-radius: 24px;
+  box-shadow: 
+    0 20px 60px rgba(74, 144, 226, 0.3),
+    0 0 0 1px rgba(255, 255, 255, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  position: relative;
+  overflow: hidden;
+  height: fit-content;
+  backdrop-filter: blur(10px);
+}
+
+.sql-query-analysis-section::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 5px;
+  background: linear-gradient(90deg, 
+    #4a90e2 0%, 
+    #357abd 25%, 
+    #5ba3f5 50%, 
+    #357abd 75%, 
+    #4a90e2 100%);
+  background-size: 200% 100%;
+  animation: shimmer 3s ease-in-out infinite;
+}
+
+.sql-query-analysis-section::after {
+  content: '';
+  position: absolute;
+  top: -50%;
+  right: -50%;
+  width: 200%;
+  height: 200%;
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.15) 0%, transparent 70%);
+  pointer-events: none;
+  animation: pulse 4s ease-in-out infinite;
+}
+
+.btn-sql-analysis {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.2) 0%, rgba(255, 255, 255, 0.1) 100%);
+  color: white;
+  border: 2px solid rgba(255, 255, 255, 0.4);
+  backdrop-filter: blur(10px);
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 
+    0 4px 15px rgba(0, 0, 0, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.3);
+}
+
+.btn-sql-analysis:hover {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.3) 0%, rgba(255, 255, 255, 0.2) 100%);
+  transform: translateY(-3px) scale(1.02);
+  box-shadow: 
+    0 8px 25px rgba(74, 144, 226, 0.5),
+    inset 0 1px 0 rgba(255, 255, 255, 0.4);
+  border-color: rgba(255, 255, 255, 0.6);
+}
+
+.btn-sql-analysis.active {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.35) 0%, rgba(255, 255, 255, 0.25) 100%);
+  box-shadow: 
+    0 6px 20px rgba(74, 144, 226, 0.6),
     inset 0 2px 4px rgba(255, 255, 255, 0.3),
     inset 0 -2px 4px rgba(0, 0, 0, 0.1);
   border-color: rgba(255, 255, 255, 0.7);
@@ -6576,6 +8567,1147 @@ onMounted(() => {
   font-size: 13px;
 }
 
+/* SQL 쿼리 분석 전용 스타일 */
+.sql-query-textarea {
+  width: 100%;
+  min-height: 500px;
+  padding: 1.25rem;
+  font-family: 'Courier New', 'Consolas', 'Monaco', monospace;
+  font-size: 14px;
+  line-height: 1.6;
+  border: 2px solid rgba(255, 140, 66, 0.3);
+  border-radius: 12px;
+  background: #ffffff;
+  color: #333;
+  resize: vertical;
+  transition: all 0.3s ease;
+  box-shadow: 
+    0 2px 8px rgba(255, 140, 66, 0.1),
+    inset 0 1px 2px rgba(255, 140, 66, 0.05);
+}
+
+.sql-query-textarea:focus {
+  outline: none;
+  border-color: #ff8c42;
+  box-shadow: 
+    0 4px 20px rgba(255, 140, 66, 0.2),
+    0 0 0 3px rgba(255, 140, 66, 0.15);
+  background: #fffefb;
+}
+
+.sql-query-textarea::placeholder {
+  color: #999;
+  font-style: italic;
+}
+
+.sql-analysis-actions {
+  display: flex;
+  gap: 1rem;
+  margin-top: 1.5rem;
+  flex-wrap: wrap;
+}
+
+.btn-analyze-sql {
+  flex: 1;
+  min-width: 250px;
+  background: linear-gradient(135deg, #ff6b35 0%, #ff8c42 50%, #ffa726 100%);
+  color: white;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  padding: 1.25rem 2.5rem;
+  border-radius: 14px;
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 
+    0 6px 24px rgba(255, 107, 53, 0.45),
+    0 2px 8px rgba(255, 140, 66, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.3),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.1);
+  position: relative;
+  overflow: visible;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  text-transform: none;
+  white-space: nowrap;
+}
+
+.btn-analyze-sql .btn-icon {
+  font-size: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: transform 0.3s ease;
+  line-height: 1;
+}
+
+.btn-analyze-sql .btn-text {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.btn-analyze-sql .loading-spinner {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  margin-right: 0.5rem;
+}
+
+.btn-analyze-sql::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+  transition: left 0.5s;
+}
+
+.btn-analyze-sql:hover:not(:disabled)::before {
+  left: 100%;
+}
+
+.btn-analyze-sql:hover:not(:disabled) {
+  transform: translateY(-4px) scale(1.03);
+  box-shadow: 
+    0 12px 36px rgba(255, 107, 53, 0.6),
+    0 4px 12px rgba(255, 140, 66, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.4),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.15);
+  background: linear-gradient(135deg, #ff5722 0%, #ff6b35 50%, #ff8c42 100%);
+  border-color: rgba(255, 255, 255, 0.5);
+}
+
+.btn-analyze-sql:hover:not(:disabled) .btn-icon {
+  transform: scale(1.2) rotate(5deg);
+}
+
+.btn-analyze-sql:active:not(:disabled) {
+  transform: translateY(-1px) scale(0.98);
+}
+
+.btn-analyze-sql:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.btn-clear-sql {
+  padding: 1.25rem 2.5rem;
+  background: linear-gradient(135deg, #fff8f0 0%, #ffe0cc 100%);
+  color: #ff6b35;
+  border: 2px solid #ff8c42;
+  border-radius: 14px;
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 
+    0 4px 12px rgba(255, 140, 66, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+.btn-clear-sql .btn-icon {
+  font-size: 18px;
+  display: inline-block;
+  transition: transform 0.3s ease;
+}
+
+.btn-clear-sql .btn-text {
+  display: inline-block;
+}
+
+.btn-clear-sql:hover {
+  background: linear-gradient(135deg, #ffe0cc 0%, #ffcc99 100%);
+  transform: translateY(-3px);
+  box-shadow: 
+    0 6px 20px rgba(255, 140, 66, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.7);
+  border-color: #ff6b35;
+  color: #ff5722;
+}
+
+.btn-clear-sql:hover .btn-icon {
+  transform: scale(1.15) rotate(-10deg);
+}
+
+.btn-clear-sql:active {
+  transform: translateY(0);
+}
+
+.loading-spinner {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top-color: white;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  flex-shrink: 0;
+  margin-right: 0.5rem;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.sql-query-analysis-container {
+  padding: 2rem;
+  background: linear-gradient(135deg, #fff8f0 0%, #ffffff 100%);
+  border: 3px solid #ff8c42;
+  border-radius: 20px;
+  box-shadow: 
+    0 8px 32px rgba(255, 140, 66, 0.25),
+    0 0 0 1px rgba(255, 140, 66, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.8);
+  margin-top: 2rem;
+  position: relative;
+  overflow: hidden;
+}
+
+.sql-query-analysis-container::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: linear-gradient(90deg, #ff6b35, #ff8c42, #ffa726, #ff8c42, #ff6b35);
+  background-size: 200% 100%;
+  animation: shimmer 3s ease-in-out infinite;
+}
+
+@keyframes shimmer {
+  0%, 100% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+}
+
+.sql-analysis-notice {
+  background: linear-gradient(135deg, #fff3e0 0%, #ffe0cc 100%);
+  border-left: 5px solid #ff8c42;
+  padding: 1.25rem;
+  margin-bottom: 2rem;
+  border-radius: 12px;
+  box-shadow: 
+    0 2px 8px rgba(255, 140, 66, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.6);
+}
+
+.sql-analysis-notice p {
+  margin: 0;
+  color: #e65100;
+  font-size: 14px;
+  line-height: 1.6;
+  font-weight: 500;
+}
+
+/* 테이블 관계 그래프 스타일 */
+.table-relationship-graph-container {
+  margin-top: 1.5rem;
+  padding: 1.5rem;
+  background: #ffffff;
+  border-radius: 12px;
+  box-shadow: 
+    0 4px 16px rgba(0, 0, 0, 0.1),
+    0 0 0 1px rgba(0, 0, 0, 0.05);
+}
+
+/* 강렬한 그래프 섹션 스타일 */
+.graph-section-featured {
+  margin-top: 0 !important;
+  margin-bottom: 3rem !important;
+  padding: 2.5rem !important;
+  background: linear-gradient(135deg, #ffffff 0%, #f8f9ff 100%) !important;
+  border: 3px solid #4a90e2 !important;
+  border-radius: 20px !important;
+  box-shadow: 
+    0 20px 60px rgba(74, 144, 226, 0.25),
+    0 8px 24px rgba(74, 144, 226, 0.15),
+    0 0 0 1px rgba(74, 144, 226, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.8) !important;
+  position: relative;
+  overflow: hidden;
+  animation: graphFadeIn 0.8s ease-out;
+}
+
+.graph-section-featured::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 6px;
+  background: linear-gradient(90deg, 
+    #4a90e2 0%, 
+    #5ba3f5 25%, 
+    #667eea 50%, 
+    #5ba3f5 75%, 
+    #4a90e2 100%);
+  background-size: 200% 100%;
+  animation: shimmer 3s ease-in-out infinite;
+}
+
+.graph-section-featured::after {
+  content: '';
+  position: absolute;
+  top: -50%;
+  right: -50%;
+  width: 200%;
+  height: 200%;
+  background: radial-gradient(circle, rgba(74, 144, 226, 0.08) 0%, transparent 70%);
+  pointer-events: none;
+  animation: pulse 4s ease-in-out infinite;
+}
+
+@keyframes graphFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.graph-header {
+  margin-bottom: 2rem;
+  text-align: center;
+}
+
+.graph-header h4 {
+  font-size: 28px !important;
+  font-weight: 800 !important;
+  color: #4a90e2 !important;
+  margin-bottom: 0.5rem !important;
+  text-shadow: 0 2px 4px rgba(74, 144, 226, 0.2);
+  letter-spacing: -0.5px;
+}
+
+.graph-subtitle {
+  font-size: 16px;
+  color: #666;
+  margin: 0;
+  font-weight: 500;
+}
+
+.graph-warning {
+  margin-top: 1rem;
+  padding: 1rem;
+  background: #fff3cd;
+  border: 2px solid #ffc107;
+  border-radius: 8px;
+  color: #856404;
+  font-size: 14px;
+  font-weight: 600;
+  text-align: center;
+}
+
+/* 리니지 정보 섹션 스타일 */
+.lineage-section-featured {
+  margin-top: 0 !important;
+  margin-bottom: 2rem !important;
+  padding: 2rem !important;
+  background: linear-gradient(135deg, #ffffff 0%, #f0f8ff 100%) !important;
+  border: 3px solid #4a90e2 !important;
+  border-radius: 16px !important;
+  box-shadow: 
+    0 12px 40px rgba(74, 144, 226, 0.2),
+    0 4px 16px rgba(74, 144, 226, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9) !important;
+}
+
+.lineage-header-with-action {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.5rem;
+}
+
+.lineage-section-featured h4 {
+  font-size: 24px !important;
+  font-weight: 800 !important;
+  color: #4a90e2 !important;
+  margin-bottom: 0 !important;
+  text-align: left;
+}
+
+.btn-lineage-quick-access {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  padding: 0.6rem 1.2rem;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+}
+
+.btn-lineage-quick-access:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(102, 126, 234, 0.6);
+}
+
+/* 리니지 연관도 요약 스타일 */
+.lineage-connectivity-summary {
+  margin-bottom: 2rem;
+  padding: 1.5rem;
+  background: linear-gradient(135deg, #f8f9ff 0%, #ffffff 100%);
+  border-radius: 12px;
+  border: 2px solid #e0e7ff;
+}
+
+.connectivity-info {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1rem;
+  flex-wrap: wrap;
+}
+
+.connectivity-label {
+  font-size: 16px;
+  font-weight: 600;
+  color: #333;
+}
+
+.connectivity-value {
+  font-size: 28px;
+  font-weight: 800;
+  padding: 0.5rem 1rem;
+  border-radius: 8px;
+  background: #f0f0f0;
+  color: #333;
+}
+
+.connectivity-value.connectivity-high {
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  color: white;
+}
+
+.connectivity-value.connectivity-medium {
+  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+  color: white;
+}
+
+.connectivity-value.connectivity-low-medium {
+  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+  color: white;
+}
+
+.connectivity-value.connectivity-low {
+  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+  color: white;
+}
+
+.connectivity-details {
+  font-size: 14px;
+  color: #666;
+  margin-left: auto;
+}
+
+.connectivity-bar {
+  width: 100%;
+  height: 12px;
+  background: #e5e7eb;
+  border-radius: 6px;
+  overflow: hidden;
+  position: relative;
+}
+
+.connectivity-fill {
+  height: 100%;
+  transition: width 0.8s ease-out;
+  border-radius: 6px;
+}
+
+.connectivity-fill.connectivity-high {
+  background: linear-gradient(90deg, #10b981 0%, #059669 100%);
+}
+
+.connectivity-fill.connectivity-medium {
+  background: linear-gradient(90deg, #3b82f6 0%, #2563eb 100%);
+}
+
+.connectivity-fill.connectivity-low-medium {
+  background: linear-gradient(90deg, #f59e0b 0%, #d97706 100%);
+}
+
+.connectivity-fill.connectivity-low {
+  background: linear-gradient(90deg, #ef4444 0%, #dc2626 100%);
+}
+
+.lineage-info-block {
+  margin-bottom: 2rem;
+  padding: 1.5rem;
+  background: #ffffff;
+  border-radius: 12px;
+  border: 1px solid rgba(74, 144, 226, 0.2);
+  box-shadow: 0 2px 8px rgba(74, 144, 226, 0.1);
+}
+
+.lineage-info-block h5 {
+  font-size: 18px;
+  font-weight: 700;
+  color: #333;
+  margin-bottom: 1rem;
+  text-align: left;
+}
+
+.lineage-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.lineage-tag {
+  display: inline-block;
+  padding: 0.5rem 1rem;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #ffffff;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.table-tag {
+  background: linear-gradient(135deg, #4a90e2 0%, #357abd 100%);
+}
+
+.cte-tag {
+  background: linear-gradient(135deg, #f5576c 0%, #d32f2f 100%);
+}
+
+.join-relationships-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.join-item {
+  padding: 1rem;
+  background: #f8f9fa;
+  border-radius: 8px;
+  border-left: 4px solid #4a90e2;
+  transition: all 0.2s ease;
+}
+
+.join-item:hover {
+  background: #f0f4ff;
+  transform: translateX(4px);
+  box-shadow: 0 2px 8px rgba(74, 144, 226, 0.15);
+}
+
+.join-header {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.join-type {
+  display: inline-block;
+  padding: 0.25rem 0.75rem;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #ffffff;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.join-type-left {
+  background: #4a90e2;
+}
+
+.join-type-inner {
+  background: #f5576c;
+}
+
+.join-type-outer {
+  background: #ff9800;
+  border: 2px dashed #ff6b00;
+}
+
+.join-type-right {
+  background: #9c27b0;
+}
+
+.join-type-default {
+  background: #757575;
+}
+
+.join-tables {
+  font-size: 15px;
+  color: #333;
+  flex: 1;
+}
+
+.join-tables strong {
+  color: #4a90e2;
+  font-weight: 700;
+}
+
+.join-condition {
+  margin-top: 0.5rem;
+  padding: 0.75rem;
+  background: #ffffff;
+  border-radius: 6px;
+  font-size: 13px;
+  color: #666;
+  border: 1px solid #e0e0e0;
+}
+
+.join-condition code {
+  background: #f5f5f5;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  font-family: 'Courier New', monospace;
+  color: #d32f2f;
+  font-size: 12px;
+}
+
+.featured-graph {
+  margin-top: 0 !important;
+  padding: 2rem !important;
+  background: linear-gradient(135deg, #fafbff 0%, #ffffff 100%) !important;
+  border: 2px solid rgba(74, 144, 226, 0.2) !important;
+  border-radius: 16px !important;
+  box-shadow: 
+    0 8px 32px rgba(74, 144, 226, 0.15),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9) !important;
+}
+
+.sql-table-graph {
+  width: 100%;
+  height: 500px;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  background: #fafafa;
+  margin-bottom: 1rem;
+}
+
+.sql-table-graph.featured {
+  height: 650px !important;
+  border: 3px solid rgba(74, 144, 226, 0.3) !important;
+  border-radius: 12px !important;
+  background: linear-gradient(135deg, #ffffff 0%, #f8f9ff 100%) !important;
+  box-shadow: 
+    0 12px 40px rgba(74, 144, 226, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9) !important;
+  transition: all 0.3s ease;
+}
+
+.sql-table-graph.featured:hover {
+  border-color: rgba(74, 144, 226, 0.5) !important;
+  box-shadow: 
+    0 16px 48px rgba(74, 144, 226, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9) !important;
+}
+
+.graph-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.5rem;
+  padding: 1rem;
+  background: #f8f9fa;
+  border-radius: 8px;
+  border: 1px solid #e0e0e0;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 13px;
+  color: #555;
+}
+
+.legend-color {
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  flex-shrink: 0;
+}
+
+.legend-line {
+  width: 30px;
+  height: 0;
+  flex-shrink: 0;
+}
+
+/* 영향도 분석 스타일 */
+.impact-analysis-section {
+  margin-top: 2rem;
+  padding: 1.5rem;
+  background: #f8f9fa;
+  border-radius: 12px;
+  border: 1px solid #e0e0e0;
+}
+
+.impact-analysis-header {
+  margin-bottom: 1.5rem;
+}
+
+.impact-analysis-header h4 {
+  margin: 0 0 0.5rem 0;
+  color: #333;
+  font-size: 1.25rem;
+}
+
+.impact-analysis-description {
+  margin: 0;
+  color: #666;
+  font-size: 0.9rem;
+}
+
+.impact-analysis-inputs {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.impact-analysis-inputs .input-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.impact-analysis-inputs label {
+  font-weight: 600;
+  color: #333;
+  font-size: 0.9rem;
+}
+
+.impact-analysis-inputs select,
+.impact-analysis-inputs input {
+  padding: 0.75rem;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  font-size: 0.9rem;
+}
+
+.impact-analysis-actions {
+  display: flex;
+  gap: 1rem;
+}
+
+.btn-analyze-impact {
+  padding: 0.75rem 1.5rem;
+  background: #667eea;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  transition: background 0.2s;
+}
+
+.btn-analyze-impact:hover:not(:disabled) {
+  background: #5568d3;
+}
+
+.btn-analyze-impact:disabled {
+  background: #ccc;
+  cursor: not-allowed;
+}
+
+.btn-clear-impact {
+  padding: 0.75rem 1.5rem;
+  background: #f5f5f5;
+  color: #333;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  transition: background 0.2s;
+}
+
+.btn-clear-impact:hover {
+  background: #e0e0e0;
+}
+
+.impact-analysis-results {
+  margin-top: 1.5rem;
+  padding: 1.5rem;
+  background: #ffffff;
+  border-radius: 8px;
+  border: 1px solid #e0e0e0;
+}
+
+.impact-analysis-results h5 {
+  margin: 0 0 1rem 0;
+  color: #333;
+  font-size: 1.1rem;
+}
+
+.impact-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+  padding: 1rem;
+  background: #f8f9fa;
+  border-radius: 8px;
+}
+
+.impact-summary-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.impact-summary-label {
+  font-size: 0.85rem;
+  color: #666;
+  font-weight: 500;
+}
+
+.impact-summary-value {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #333;
+}
+
+.impact-summary-value.impact-critical {
+  color: #d32f2f;
+}
+
+.impact-summary-value.impact-high {
+  color: #f57c00;
+}
+
+.impact-summary-value.impact-medium {
+  color: #fbc02d;
+}
+
+.impact-summary-value.impact-low {
+  color: #388e3c;
+}
+
+.impact-list {
+  margin-bottom: 1.5rem;
+}
+
+.impact-list h6 {
+  margin: 0 0 0.75rem 0;
+  color: #333;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.impact-items {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.impact-item {
+  padding: 1rem;
+  background: #ffffff;
+  border-radius: 6px;
+  border: 1px solid #e0e0e0;
+  border-left: 4px solid #ddd;
+}
+
+.impact-item.impact-critical {
+  border-left-color: #d32f2f;
+  background: #ffebee;
+}
+
+.impact-item.impact-high {
+  border-left-color: #f57c00;
+  background: #fff3e0;
+}
+
+.impact-item.impact-medium {
+  border-left-color: #fbc02d;
+  background: #fffde7;
+}
+
+.impact-item.impact-low {
+  border-left-color: #388e3c;
+  background: #e8f5e9;
+}
+
+.impact-item.indirect {
+  border-left-color: #9e9e9e;
+  background: #f5f5f5;
+}
+
+.impact-item-header {
+  display: flex;
+  gap: 1rem;
+  margin-bottom: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.impact-type {
+  padding: 0.25rem 0.75rem;
+  background: #667eea;
+  color: white;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.impact-level {
+  padding: 0.25rem 0.75rem;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.impact-level.impact-critical {
+  background: #d32f2f;
+  color: white;
+}
+
+.impact-level.impact-high {
+  background: #f57c00;
+  color: white;
+}
+
+.impact-level.impact-medium {
+  background: #fbc02d;
+  color: #333;
+}
+
+.impact-level.impact-low {
+  background: #388e3c;
+  color: white;
+}
+
+.impact-location {
+  padding: 0.25rem 0.75rem;
+  background: #e0e0e0;
+  color: #666;
+  border-radius: 4px;
+  font-size: 0.8rem;
+}
+
+.impact-snippet {
+  padding: 0.75rem;
+  background: #f5f5f5;
+  border-radius: 4px;
+  font-family: 'Courier New', monospace;
+  font-size: 0.85rem;
+  color: #333;
+  overflow-x: auto;
+}
+
+.impact-path {
+  margin-top: 0.5rem;
+  padding: 0.5rem;
+  background: #f0f0f0;
+  border-radius: 4px;
+  font-size: 0.85rem;
+  color: #666;
+}
+
+.impact-related {
+  margin-top: 0.5rem;
+  font-size: 0.85rem;
+  color: #666;
+}
+
+.impact-affected {
+  margin-bottom: 1.5rem;
+}
+
+.impact-affected h6 {
+  margin: 0 0 0.75rem 0;
+  color: #333;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.impact-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.impact-tag {
+  padding: 0.5rem 1rem;
+  background: #e3f2fd;
+  color: #1976d2;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+
+.impact-tag.cte-tag {
+  background: #f3e5f5;
+  color: #7b1fa2;
+}
+
+.impact-recommendations {
+  margin-top: 1.5rem;
+  padding: 1rem;
+  background: #fff3cd;
+  border-radius: 8px;
+  border: 1px solid #ffc107;
+}
+
+.impact-recommendations h6 {
+  margin: 0 0 0.75rem 0;
+  color: #856404;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.recommendation-items {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.recommendation-item {
+  padding: 1rem;
+  background: #ffffff;
+  border-radius: 6px;
+  border-left: 4px solid #ffc107;
+}
+
+.recommendation-item.critical {
+  border-left-color: #d32f2f;
+  background: #ffebee;
+}
+
+.recommendation-item.high {
+  border-left-color: #f57c00;
+  background: #fff3e0;
+}
+
+.recommendation-item.medium {
+  border-left-color: #ffc107;
+  background: #fffde7;
+}
+
+.recommendation-priority {
+  font-weight: 700;
+  color: #856404;
+  margin-bottom: 0.5rem;
+}
+
+.recommendation-item.critical .recommendation-priority {
+  color: #d32f2f;
+}
+
+.recommendation-item.high .recommendation-priority {
+  color: #f57c00;
+}
+
+.recommendation-message {
+  margin-bottom: 0.5rem;
+  color: #333;
+}
+
+.recommendation-action {
+  font-size: 0.9rem;
+  color: #666;
+  font-style: italic;
+}
+
+.analysis-section {
+  margin-bottom: 2rem;
+  padding: 1.5rem;
+  background: #ffffff;
+  border-radius: 12px;
+  box-shadow: 
+    0 2px 8px rgba(0, 0, 0, 0.08),
+    0 0 0 1px rgba(0, 0, 0, 0.05);
+  text-align: left;
+}
+
+.analysis-section h4 {
+  margin-top: 0;
+  margin-bottom: 1rem;
+  color: #333;
+  font-size: 18px;
+  font-weight: 700;
+  text-align: left;
+}
+
+.analysis-section h5 {
+  margin-top: 1rem;
+  margin-bottom: 0.75rem;
+  color: #555;
+  font-size: 16px;
+  font-weight: 600;
+  text-align: left;
+}
+
+.structure-info {
+  text-align: left;
+}
+
+.structure-info p {
+  margin: 0.5rem 0;
+  color: #555;
+  font-size: 14px;
+  line-height: 1.6;
+  text-align: left;
+}
+
+.structure-info strong {
+  color: #333;
+  font-weight: 600;
+}
+
+.sql-analysis-results {
+  text-align: left;
+}
+
+.sql-analysis-results h3 {
+  text-align: left;
+}
+
+.analysis-summary {
+  text-align: left;
+}
+
+.analysis-summary h4 {
+  text-align: left;
+}
+
 .help-box {
   background: rgba(255, 255, 255, 0.05);
   border-left: 3px solid #4facfe;
@@ -6602,6 +9734,209 @@ onMounted(() => {
   border-radius: 3px;
   font-family: 'Courier New', monospace;
   color: #4facfe;
+}
+
+/* 리포트 다운로드 버튼 영역 */
+.analysis-actions {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-top: 2rem;
+  padding-top: 1.5rem;
+  border-top: 2px solid #e0e0e0;
+}
+
+.analysis-actions .btn {
+  padding: 0.75rem 1.5rem;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.analysis-actions .btn-download {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+}
+
+.analysis-actions .btn-download:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(102, 126, 234, 0.6);
+}
+
+.analysis-actions .btn-open-lineage {
+  background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+  color: white;
+  box-shadow: 0 4px 15px rgba(79, 172, 254, 0.4);
+}
+
+.analysis-actions .btn-open-lineage:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(79, 172, 254, 0.6);
+}
+
+/* 리니지 생성 프로그레스 바 */
+.lineage-generation-progress {
+  flex: 1;
+  min-width: 300px;
+  padding: 1rem;
+  background: linear-gradient(135deg, #f8f9ff 0%, #ffffff 100%);
+  border-radius: 12px;
+  border: 2px solid #e0e7ff;
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.15);
+}
+
+.progress-label {
+  font-size: 14px;
+  font-weight: 600;
+  color: #667eea;
+  margin-bottom: 0.75rem;
+  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+.progress-label::before {
+  content: '⏳';
+  font-size: 16px;
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+.progress-bar-container {
+  width: 100%;
+  height: 20px;
+  background: #e5e7eb;
+  border-radius: 10px;
+  overflow: hidden;
+  position: relative;
+  margin-bottom: 0.5rem;
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.progress-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #667eea 0%, #764ba2 50%, #667eea 100%);
+  background-size: 200% 100%;
+  border-radius: 10px;
+  transition: width 0.3s ease-out;
+  animation: progressShimmer 2s linear infinite;
+  box-shadow: 0 2px 8px rgba(102, 126, 234, 0.4);
+}
+
+.progress-percentage {
+  font-size: 12px;
+  font-weight: 700;
+  color: #667eea;
+  text-align: center;
+}
+
+@keyframes progressShimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.7;
+    transform: scale(1.1);
+  }
+}
+
+/* 리니지 시각화 컨테이너 */
+.lineage-visualization-container {
+  margin-top: 2rem;
+  padding: 1.5rem;
+  background: #ffffff;
+  border-radius: 12px;
+  box-shadow: 
+    0 4px 16px rgba(0, 0, 0, 0.1),
+    0 0 0 1px rgba(0, 0, 0, 0.05);
+  border: 2px solid #4facfe;
+}
+
+.lineage-visualization-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+  padding-bottom: 1rem;
+  border-bottom: 2px solid #e0e0e0;
+}
+
+.lineage-visualization-header h4 {
+  margin: 0;
+  color: #333;
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.btn-close-visualization {
+  background: #f5576c;
+  color: white;
+  border: none;
+  border-radius: 50%;
+  width: 32px;
+  height: 32px;
+  font-size: 18px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s ease;
+  box-shadow: 0 2px 8px rgba(245, 87, 108, 0.3);
+}
+
+.btn-close-visualization:hover {
+  background: #e0485c;
+  transform: scale(1.1);
+  box-shadow: 0 4px 12px rgba(245, 87, 108, 0.5);
+}
+
+.lineage-visualization-content {
+  position: relative;
+  width: 100%;
+  min-height: 600px;
+  max-height: 800px;
+  border-radius: 8px;
+  overflow: auto;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  background: #ffffff;
+}
+
+.lineage-html-content {
+  width: 100%;
+  height: 100%;
+}
+
+.lineage-html-content iframe {
+  width: 100%;
+  height: 800px;
+  border: none;
+}
+
+.lineage-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 400px;
+  color: #666;
+  font-size: 16px;
 }
 
 .interact-actions-section {
@@ -6640,10 +9975,10 @@ onMounted(() => {
 
 /* 기타 기능 섹션 */
 .other-features-section {
-  padding: 1.5rem;
+  padding: 1rem;
   background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 50%, #e9ecef 100%);
-  border-radius: 20px;
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.08), 0 0 0 1px rgba(0, 0, 0, 0.05);
+  border-radius: 16px;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.08), 0 0 0 1px rgba(0, 0, 0, 0.05);
   border: 2px solid rgba(255, 255, 255, 0.8);
   position: relative;
   overflow: hidden;
@@ -8309,34 +11644,93 @@ onMounted(() => {
 
 .details-table {
   overflow-x: auto;
+  max-height: 500px;
+  overflow-y: auto;
 }
 
 .details-table table {
   width: 100%;
   border-collapse: collapse;
   font-size: 14px;
+  min-width: 800px;
 }
 
 .details-table thead {
   background: linear-gradient(135deg, #f5576c 0%, #f093fb 100%);
   color: white;
+  position: sticky;
+  top: 0;
+  z-index: 10;
 }
 
 .details-table th {
-  padding: 12px;
+  padding: 14px 12px;
   text-align: left;
   font-weight: 600;
   font-size: 13px;
+  white-space: nowrap;
+}
+
+.details-table th:first-child {
+  width: 60px;
+  text-align: center;
+}
+
+.details-table th:nth-child(2) {
+  width: 120px;
+}
+
+.details-table th:nth-child(3) {
+  width: 100px;
+}
+
+.details-table th:nth-child(4) {
+  width: 200px;
+  min-width: 180px;
+}
+
+.details-table th:nth-child(5) {
+  width: 150px;
+  min-width: 130px;
+}
+
+.details-table th:nth-child(6) {
+  width: 100px;
+}
+
+.details-table th:nth-child(7) {
+  width: 100px;
 }
 
 .details-table td {
   padding: 12px;
   border-bottom: 1px solid #e0e0e0;
   color: #333;
+  vertical-align: middle;
+}
+
+.details-table td:first-child {
+  text-align: center;
+  color: #666;
+  font-weight: 500;
+}
+
+.details-table td:nth-child(4) {
+  font-weight: 600;
+  color: #333;
 }
 
 .details-table tbody tr:hover {
-  background: #f8f9fa;
+  background: #f0f4ff;
+  transition: background 0.2s ease;
+}
+
+.details-table tbody tr:nth-child(even) {
+  background: #fafafa;
+}
+
+.details-table tbody tr:nth-child(even):hover {
+  background: #f0f4ff;
 }
 
 .badge-current {
@@ -9602,6 +12996,144 @@ onMounted(() => {
 .btn-sm {
   padding: 6px 12px;
   font-size: 14px;
+}
+
+/* 문서 라이브러리 스타일 */
+.docs-library-modal {
+  max-width: 1200px;
+}
+
+.docs-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 16px;
+}
+
+.doc-card {
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.doc-card:hover {
+  transform: translateY(-2px);
+}
+
+.doc-viewer-modal {
+  max-width: 1000px;
+}
+
+.doc-content {
+  line-height: 1.8;
+  color: #333;
+}
+
+.doc-content h1,
+.doc-content h2,
+.doc-content h3,
+.doc-content h4,
+.doc-content h5,
+.doc-content h6 {
+  margin-top: 24px;
+  margin-bottom: 16px;
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+.doc-content h1 {
+  font-size: 2em;
+  border-bottom: 2px solid #eaecef;
+  padding-bottom: 8px;
+}
+
+.doc-content h2 {
+  font-size: 1.5em;
+  border-bottom: 1px solid #eaecef;
+  padding-bottom: 8px;
+}
+
+.doc-content h3 {
+  font-size: 1.25em;
+}
+
+.doc-content p {
+  margin-bottom: 16px;
+}
+
+.doc-content ul,
+.doc-content ol {
+  margin-bottom: 16px;
+  padding-left: 30px;
+}
+
+.doc-content li {
+  margin-bottom: 8px;
+}
+
+.doc-content code {
+  padding: 2px 6px;
+  background: #f6f8fa;
+  border-radius: 3px;
+  font-family: 'Courier New', monospace;
+  font-size: 0.9em;
+}
+
+.doc-content pre {
+  padding: 16px;
+  background: #f6f8fa;
+  border-radius: 6px;
+  overflow-x: auto;
+  margin-bottom: 16px;
+}
+
+.doc-content pre code {
+  padding: 0;
+  background: transparent;
+}
+
+.doc-content blockquote {
+  padding: 0 16px;
+  color: #6a737d;
+  border-left: 4px solid #dfe2e5;
+  margin-bottom: 16px;
+}
+
+.doc-content table {
+  border-collapse: collapse;
+  width: 100%;
+  margin-bottom: 16px;
+}
+
+.doc-content table th,
+.doc-content table td {
+  padding: 8px 12px;
+  border: 1px solid #dfe2e5;
+}
+
+.doc-content table th {
+  background: #f6f8fa;
+  font-weight: 600;
+}
+
+.doc-content a {
+  color: #0366d6;
+  text-decoration: none;
+}
+
+.doc-content a:hover {
+  text-decoration: underline;
+}
+
+.doc-content img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 4px;
+  margin: 16px 0;
+}
+
+.doc-content hr {
+  height: 1px;
+  background: #eaecef;
+  border: none;
+  margin: 24px 0;
 }
 
 .no-api-keys {

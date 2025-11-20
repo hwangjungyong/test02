@@ -42,7 +42,7 @@ MCP 서버가 있는 상황:
 
 ## 2. 프로젝트의 MCP 서버 목록
 
-우리 프로젝트에는 **3개의 MCP 서버**가 있습니다:
+우리 프로젝트에는 **5개의 MCP 서버**가 있습니다:
 
 ### 1️⃣ **mcp-server.js** (Node.js 서버)
 - **역할**: AI 기사 검색 및 라디오 방송 음악 정보
@@ -54,7 +54,19 @@ MCP 서버가 있는 상황:
 - **언어**: Python
 - **파일 위치**: `mcp-unified-server.py`
 
-### 3️⃣ **mcp-screen-validator-http-server.py** (Python HTTP 서버)
+### 3️⃣ **mcp-error-log-analyzer.py** (Python 에러 로그 분석 서버)
+- **역할**: 에러 로그 자동 분석, 조치 방법 및 재발 방지책 제안
+- **언어**: Python
+- **파일 위치**: `mcp-error-log-analyzer.py`
+- **특징**: GCP 및 일반 로그 형식 자동 감지 및 파싱
+
+### 4️⃣ **mcp-sql-query-analyzer.py** (Python SQL 쿼리 분석 서버)
+- **역할**: PostgreSQL 쿼리 구조, 성능, 최적화, 복잡도, 보안 분석
+- **언어**: Python
+- **파일 위치**: `mcp-sql-query-analyzer.py`
+- **특징**: 3000-4000라인 복잡한 쿼리 분석 지원, JSON 및 마크다운 리포트 생성
+
+### 5️⃣ **mcp-screen-validator-http-server.py** (Python HTTP 서버)
 - **역할**: 웹 페이지 화면 검증 (스크린샷, 요소 확인)
 - **언어**: Python
 - **파일 위치**: `mcp-screen-validator-http-server.py`
@@ -91,7 +103,74 @@ MCP 서버가 있는 상황:
 
 ---
 
-### 2️⃣ mcp-unified-server.py (Python 통합 서버)
+### 2️⃣ mcp-error-log-analyzer.py (Python 에러 로그 분석 서버)
+
+#### 제공하는 기능 (도구)
+
+1. **`analyze_error_logs`** - 에러 로그 분석
+   - 워크스페이스에서 로그 파일 자동 검색
+   - GCP 및 일반 로그 형식 자동 감지 및 파싱
+   - 에러 정보를 테이블 형태로 출력
+   - 조치 방법 및 재발 방지책 제안
+
+#### 사용 예시
+
+```
+"워크스페이스의 에러 로그를 분석해줘"
+→ analyze_error_logs 도구 사용
+→ 결과: 에러 로그 요약, 분석, 조치 방법, 재발 방지책 제공
+```
+
+#### 주요 기능
+
+- **자동 로그 파일 검색**: `logs/`, `log/` 디렉토리 및 루트 디렉토리에서 자동 검색
+- **지능형 로그 파싱**: GCP 로그 및 일반 로그 형식 자동 감지
+- **에러 타입 분류**: database, network, authentication, memory, file, syntax 등
+- **조치 방법 제안**: 에러 타입별 구체적인 조치 방법 제시
+- **재발 방지책 제안**: 에러 타입별 재발 방지 방법 제시
+
+**상세 가이드**: [`docs/에러_로그_분석_MCP_서버_가이드.md`](./docs/에러_로그_분석_MCP_서버_가이드.md)
+
+---
+
+### 4️⃣ mcp-sql-query-analyzer.py (Python SQL 쿼리 분석 서버)
+
+#### 제공하는 기능 (도구)
+
+1. **`analyze_sql_query`** - SQL 쿼리 분석
+   - PostgreSQL 쿼리 구조 분석 (테이블, 컬럼, JOIN, 서브쿼리 등)
+   - 성능 분석 (인덱스 사용, 풀 스캔 위험도 등)
+   - 복잡도 분석 (중첩도, 테이블 수 등)
+   - 보안 분석 (SQL Injection 취약점 등)
+   - 최적화 제안 (인덱스 제안, 쿼리 리팩토링 등)
+   - JSON 및 마크다운 리포트 생성
+
+#### 사용 예시
+
+```
+"queries/complex_query.sql 파일의 쿼리를 분석해줘"
+→ analyze_sql_query 도구 사용 (query_file: "queries/complex_query.sql")
+→ 결과: 구조 분석, 성능 분석, 복잡도 분석, 보안 분석, 최적화 제안 제공
+
+"다음 쿼리를 분석해줘: SELECT * FROM users WHERE id = 1;"
+→ analyze_sql_query 도구 사용 (query_text: "SELECT * FROM users WHERE id = 1;")
+→ 결과: 분석 리포트 생성
+```
+
+#### 주요 기능
+
+- **쿼리 구조 분석**: 테이블, 컬럼, JOIN, 서브쿼리, CTE 등 추출
+- **성능 분석**: 인덱스 사용 가능성, 풀 스캔 위험도, 비효율적인 JOIN 패턴 감지
+- **복잡도 분석**: 쿼리 길이, 테이블 수, JOIN 수, 서브쿼리 깊이 등 평가
+- **보안 분석**: SQL Injection 취약점, 권한 이슈, 데이터 노출 위험 검사
+- **최적화 제안**: 인덱스 제안, 쿼리 리팩토링, 조건 최적화 등 구체적 제안
+- **리포트 생성**: JSON 및 마크다운 형식으로 상세 리포트 생성
+
+**상세 가이드**: [`docs/SQL_쿼리_분석_MCP_서버_가이드.md`](./docs/SQL_쿼리_분석_MCP_서버_가이드.md)
+
+---
+
+### 5️⃣ mcp-unified-server.py (Python 통합 서버)
 
 #### 제공하는 기능 (도구)
 
@@ -140,6 +219,16 @@ MCP 서버가 있는 상황:
       "command": "node",
       "args": ["mcp-server.js"],
       "cwd": "C:/test/test02"
+    },
+    "error-log-analyzer": {
+      "command": "python",
+      "args": ["mcp-error-log-analyzer.py"],
+      "cwd": "C:/test/test02"
+    },
+    "sql-query-analyzer": {
+      "command": "python",
+      "args": ["mcp-sql-query-analyzer.py"],
+      "cwd": "C:/test/test02"
     }
   }
 }
@@ -147,12 +236,32 @@ MCP 서버가 있는 상황:
 
 ### 의존성 설치
 
-#### Python 패키지
+#### 자동 빌드 스크립트 사용 (권장)
+
+**Windows:**
 ```bash
-pip install mcp
+build-all-mcp-servers.bat
 ```
 
-#### Node.js 패키지
+**Linux/macOS:**
+```bash
+chmod +x build-all-mcp-servers.sh
+./build-all-mcp-servers.sh
+```
+
+이 스크립트는 다음을 자동으로 수행합니다:
+- Python 및 Node.js 설치 확인
+- MCP SDK 설치 확인 및 자동 설치
+- 모든 MCP 서버 파일 검증
+
+#### 수동 설치
+
+**Python 패키지:**
+```bash
+pip install mcp sqlparse
+```
+
+**Node.js 패키지:**
 ```bash
 npm install
 ```
@@ -201,7 +310,54 @@ npm install
 
 ---
 
-### 테스트 3: 도서 추천 (`recommend_books`)
+### 테스트 3: 에러 로그 분석 (`analyze_error_logs`)
+
+**요청:**
+```
+"워크스페이스의 에러 로그를 분석해줘"
+```
+
+**예상 동작:**
+1. Cursor AI가 `analyze_error_logs` 도구를 자동으로 선택
+2. 워크스페이스에서 로그 파일 자동 검색
+3. 로그 형식 자동 감지 및 파싱
+4. 결과: 에러 로그 요약 테이블, 분석, 조치 방법, 재발 방지책 제공
+
+**테스트 방법:**
+1. Cursor AI 채팅에서 "워크스페이스의 에러 로그를 분석해줘" 입력
+2. AI가 자동으로 `analyze_error_logs` 도구 사용
+3. 결과 확인: 에러 로그 요약 테이블, 분석 결과, 조치 방법, 재발 방지책
+
+---
+
+### 테스트 4: SQL 쿼리 분석 (`analyze_sql_query`)
+
+**요청:**
+```
+"queries/complex_query.sql 파일의 쿼리를 분석해줘"
+```
+
+**예상 동작:**
+1. Cursor AI가 `analyze_sql_query` 도구를 자동으로 선택
+2. 파라미터: `{ "query_file": "queries/complex_query.sql", "output_format": "both" }`
+3. MCP 서버가 쿼리 분석 수행
+4. 결과: 구조 분석, 성능 분석, 복잡도 분석, 보안 분석, 최적화 제안 제공
+5. JSON 및 마크다운 리포트 파일 생성
+
+**테스트 방법:**
+1. Cursor AI 채팅에서 "queries/complex_query.sql 파일의 쿼리를 분석해줘" 입력
+2. AI가 자동으로 `analyze_sql_query` 도구 사용
+3. 결과 확인: 분석 요약, 성능 점수, 복잡도 점수, 보안 점수, 최적화 제안
+4. 리포트 파일 확인: `logs/sql_analysis/{파일명}_analysis_{타임스탬프}.json`, `.md`
+
+**직접 쿼리 입력 테스트:**
+```
+"다음 쿼리를 분석해줘: SELECT u.id, u.name FROM users u WHERE u.status = 'active';"
+```
+
+---
+
+### 테스트 5: 도서 추천 (`recommend_books`)
 
 **요청:**
 ```
