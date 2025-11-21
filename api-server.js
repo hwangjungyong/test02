@@ -2511,7 +2511,23 @@ const server = http.createServer(async (req, res) => {
   // 엔드포인트: POST /api/screen/interact
   // 기능: Python HTTP 서버(포트 3002)로 요청을 프록시
   else if (req.url && (req.url.startsWith('/api/screen/validate') || req.url.startsWith('/api/screen/capture') || req.url.startsWith('/api/screen/interact'))) {
+    console.log(`[API 서버] 화면 검증 요청 수신: ${req.method} ${req.url}`);
+    
     let body = '';
+    let proxyReq = null;
+    let timeout = null;
+    
+    // 요청 본문 읽기 에러 처리
+    req.on('error', (error) => {
+      console.error('[API 서버] 요청 본문 읽기 오류:', error);
+      if (!res.headersSent) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ 
+          success: false,
+          error: `요청 처리 중 오류가 발생했습니다: ${error.message}`
+        }));
+      }
+    });
     
     req.on('data', chunk => {
       body += chunk.toString();
@@ -2519,10 +2535,39 @@ const server = http.createServer(async (req, res) => {
     
     req.on('end', async () => {
       try {
-        const requestData = JSON.parse(body);
-        const pythonServerUrl = `http://localhost:3002${req.url}`;
+        // 요청 본문이 비어있는지 확인
+        if (!body || body.trim() === '') {
+          console.error('[API 서버] 요청 본문이 비어있습니다.');
+          if (!res.headersSent) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ 
+              success: false,
+              error: '요청 본문이 비어있습니다. JSON 데이터를 제공해주세요.'
+            }));
+          }
+          return;
+        }
         
+        let requestData;
+        try {
+          requestData = JSON.parse(body);
+        } catch (parseError) {
+          console.error('[API 서버] JSON 파싱 오류:', parseError.message);
+          console.error('[API 서버] 요청 본문 (처음 500자):', body.substring(0, 500));
+          if (!res.headersSent) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ 
+              success: false,
+              error: `JSON 파싱 오류: ${parseError.message}`,
+              suggestion: '요청 본문이 올바른 JSON 형식인지 확인하세요.'
+            }));
+          }
+          return;
+        }
+        
+        const pythonServerUrl = `http://localhost:3002${req.url}`;
         console.log(`[API 서버] 화면 검증 요청 프록시: ${pythonServerUrl}`);
+        console.log(`[API 서버] 요청 데이터:`, { url: requestData.url, hasSelector: !!requestData.selector });
         
         // Python HTTP 서버로 요청 전달
         const requestOptions = {
@@ -2533,48 +2578,88 @@ const server = http.createServer(async (req, res) => {
           headers: {
             'Content-Type': 'application/json',
             'Content-Length': Buffer.byteLength(body)
-          }
+          },
+          timeout: 130000 // 130초 타임아웃
         };
         
         // 타임아웃 설정 (130초 - Python 서버 타임아웃보다 길게)
-        const timeout = setTimeout(() => {
+        timeout = setTimeout(() => {
           if (!res.headersSent) {
             console.error('[API 서버] 화면 검증 프록시 타임아웃 (130초)');
-            proxyReq.destroy();
-            res.writeHead(504, { 'Content-Type': 'application/json' });
+            if (proxyReq) {
+              proxyReq.destroy();
+            }
+            res.writeHead(504, { 
+              'Content-Type': 'application/json',
+              'Access-Control-Allow-Origin': '*'
+            });
             res.end(JSON.stringify({ 
               success: false,
-              error: 'Python 서버 응답 타임아웃 (130초 초과). 서버가 응답하지 않습니다.'
+              error: 'Python 서버 응답 타임아웃 (130초 초과). 서버가 응답하지 않습니다.',
+              suggestion: 'Python HTTP 서버(mcp-screen-validator-http-server.py)가 포트 3002에서 실행 중인지 확인하세요.'
             }));
           }
         }, 130000); // 130초
         
-        const proxyReq = http.request(requestOptions, (proxyRes) => {
+        proxyReq = http.request(requestOptions, (proxyRes) => {
           clearTimeout(timeout);
           let proxyBody = '';
           
           proxyRes.on('data', (chunk) => {
-            proxyBody += chunk;
+            proxyBody += chunk.toString();
           });
           
           proxyRes.on('end', () => {
             if (!res.headersSent) {
-              res.writeHead(proxyRes.statusCode || 200, {
-                'Content-Type': 'application/json',
-                'Access-Control-Allow-Origin': '*'
-              });
-              res.end(proxyBody);
+              try {
+                // 응답 본문이 비어있는지 확인
+                if (!proxyBody || proxyBody.trim() === '') {
+                  console.error('[API 서버] Python 서버 응답 본문이 비어있습니다.');
+                  res.writeHead(500, { 
+                    'Content-Type': 'application/json',
+                    'Access-Control-Allow-Origin': '*'
+                  });
+                  res.end(JSON.stringify({ 
+                    success: false,
+                    error: 'Python 서버가 빈 응답을 반환했습니다.',
+                    suggestion: 'Python HTTP 서버 로그를 확인하세요.'
+                  }));
+                  return;
+                }
+                
+                res.writeHead(proxyRes.statusCode || 200, {
+                  'Content-Type': 'application/json',
+                  'Access-Control-Allow-Origin': '*'
+                });
+                res.end(proxyBody);
+              } catch (endError) {
+                console.error('[API 서버] 응답 전송 오류:', endError);
+                if (!res.headersSent) {
+                  res.writeHead(500, { 
+                    'Content-Type': 'application/json',
+                    'Access-Control-Allow-Origin': '*'
+                  });
+                  res.end(JSON.stringify({ 
+                    success: false,
+                    error: `응답 전송 중 오류가 발생했습니다: ${endError.message}`
+                  }));
+                }
+              }
             }
           });
           
           proxyRes.on('error', (error) => {
             clearTimeout(timeout);
+            console.error('[API 서버] Python 서버 응답 스트림 오류:', error);
             if (!res.headersSent) {
-              console.error('[API 서버] Python 서버 응답 오류:', error);
-              res.writeHead(500, { 'Content-Type': 'application/json' });
+              res.writeHead(500, { 
+                'Content-Type': 'application/json',
+                'Access-Control-Allow-Origin': '*'
+              });
               res.end(JSON.stringify({ 
                 success: false,
-                error: `Python 서버 응답 오류: ${error.message}`
+                error: `Python 서버 응답 오류: ${error.message}`,
+                suggestion: 'Python HTTP 서버가 정상적으로 실행 중인지 확인하세요.'
               }));
             }
           });
@@ -2582,12 +2667,31 @@ const server = http.createServer(async (req, res) => {
         
         proxyReq.on('error', (error) => {
           clearTimeout(timeout);
+          console.error('[API 서버] 화면 검증 프록시 연결 오류:', error);
+          console.error('[API 서버] 오류 코드:', error.code);
+          console.error('[API 서버] 오류 메시지:', error.message);
+          
           if (!res.headersSent) {
-            console.error('[API 서버] 화면 검증 프록시 오류:', error);
-            res.writeHead(500, { 'Content-Type': 'application/json' });
+            let errorMessage = `Python 서버 연결 실패: ${error.message}`;
+            let suggestion = 'Python HTTP 서버가 실행 중인지 확인하세요. (포트 3002)';
+            
+            if (error.code === 'ECONNREFUSED') {
+              errorMessage = 'Python HTTP 서버에 연결할 수 없습니다. 서버가 실행 중인지 확인하세요.';
+              suggestion = '다음 명령어로 Python HTTP 서버를 시작하세요: python mcp-screen-validator-http-server.py';
+            } else if (error.code === 'ETIMEDOUT') {
+              errorMessage = 'Python 서버 연결 타임아웃';
+              suggestion = 'Python 서버가 응답하지 않습니다. 서버 상태를 확인하세요.';
+            }
+            
+            res.writeHead(500, { 
+              'Content-Type': 'application/json',
+              'Access-Control-Allow-Origin': '*'
+            });
             res.end(JSON.stringify({ 
               success: false,
-              error: `Python 서버 연결 실패: ${error.message}. Python HTTP 서버가 실행 중인지 확인하세요. (포트 3002)`
+              error: errorMessage,
+              errorCode: error.code,
+              suggestion: suggestion
             }));
           }
         });
@@ -2595,11 +2699,17 @@ const server = http.createServer(async (req, res) => {
         proxyReq.setTimeout(130000, () => {
           if (!res.headersSent) {
             console.error('[API 서버] 프록시 요청 타임아웃');
-            proxyReq.destroy();
-            res.writeHead(504, { 'Content-Type': 'application/json' });
+            if (proxyReq) {
+              proxyReq.destroy();
+            }
+            res.writeHead(504, { 
+              'Content-Type': 'application/json',
+              'Access-Control-Allow-Origin': '*'
+            });
             res.end(JSON.stringify({ 
               success: false,
-              error: 'Python 서버 연결 타임아웃 (130초 초과)'
+              error: 'Python 서버 연결 타임아웃 (130초 초과)',
+              suggestion: 'Python 서버가 응답하지 않습니다. 서버 로그를 확인하세요.'
             }));
           }
         });
@@ -2608,9 +2718,20 @@ const server = http.createServer(async (req, res) => {
         proxyReq.end();
         
       } catch (error) {
+        clearTimeout(timeout);
         console.error('[API 서버] 화면 검증 요청 처리 오류:', error);
-        res.writeHead(500, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ success: false, error: error.message }));
+        console.error('[API 서버] 오류 스택:', error.stack);
+        if (!res.headersSent) {
+          res.writeHead(500, { 
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': '*'
+          });
+          res.end(JSON.stringify({ 
+            success: false, 
+            error: `요청 처리 중 오류가 발생했습니다: ${error.message}`,
+            errorType: error.name || 'UnknownError'
+          }));
+        }
       }
     });
   }
@@ -2641,19 +2762,53 @@ const server = http.createServer(async (req, res) => {
       bodySize += chunk.length;
       if (bodySize > maxBodySize) {
         console.error('[API 서버] 요청 본문 크기 초과:', bodySize);
-        res.writeHead(413, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ 
-          success: false,
-          error: '요청 본문이 너무 큽니다. (50MB 초과)'
-        }));
+        if (!res.headersSent) {
+          res.writeHead(413, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ 
+            success: false,
+            error: '요청 본문이 너무 큽니다. (50MB 초과)'
+          }));
+        }
         return;
       }
       body += chunk.toString('utf-8');
     });
     
+    req.on('error', (error) => {
+      console.error('[API 서버] 요청 처리 중 오류:', error);
+      if (!res.headersSent) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ 
+          success: false,
+          error: `요청 처리 중 오류가 발생했습니다: ${error.message}`
+        }));
+      }
+    });
+    
     req.on('end', async () => {
       try {
-        const requestData = JSON.parse(body);
+        // 요청 본문이 비어있는지 확인
+        if (!body || body.trim() === '') {
+          console.error('[API 서버] 요청 본문이 비어있습니다.');
+          return sendJSON(res, 400, {
+            success: false,
+            error: '요청 본문이 비어있습니다. JSON 데이터를 제공해주세요.'
+          });
+        }
+        
+        let requestData;
+        try {
+          requestData = JSON.parse(body);
+        } catch (parseError) {
+          console.error('[API 서버] JSON 파싱 오류:', parseError.message);
+          console.error('[API 서버] 요청 본문 (처음 500자):', body.substring(0, 500));
+          return sendJSON(res, 400, {
+            success: false,
+            error: `JSON 파싱 오류: ${parseError.message}`,
+            suggestion: '요청 본문이 올바른 JSON 형식인지 확인하세요.'
+          });
+        }
+        
         const { query_file, query_text, output_format = 'both' } = requestData;
         
         console.log('[API 서버] SQL 쿼리 분석 요청');
@@ -2668,12 +2823,28 @@ const server = http.createServer(async (req, res) => {
         
         // Python 스크립트 실행을 위한 명령어 구성
         const pythonScript = join(__dirname, 'test-sql-query-analyzer.py');
+        
+        // Python 스크립트 파일 존재 여부 확인
+        const fsCheck = await import('fs');
+        const fsForCheck = fsCheck.default || fsCheck;
+        if (!fsForCheck.existsSync(pythonScript)) {
+          console.error('[API 서버] Python 스크립트 파일을 찾을 수 없습니다:', pythonScript);
+          return sendJSON(res, 500, {
+            success: false,
+            error: `Python 스크립트 파일을 찾을 수 없습니다: ${pythonScript}`,
+            suggestion: 'test-sql-query-analyzer.py 파일이 프로젝트 루트에 있는지 확인하세요.'
+          });
+        }
+        
         let command = `python "${pythonScript}"`;
         
         // 임시 SQL 파일 생성 (query_text가 있는 경우)
         let tempFile = null;
-        const fs = await import('fs');
-        const path = await import('path');
+        // fs와 path는 이미 상단에서 import되어 있지만, 동적 import가 필요한 경우를 위해
+        const fsModule = await import('fs');
+        const pathModule = await import('path');
+        const fs = fsModule.default || fsModule;
+        const path = pathModule.default || pathModule;
         
         if (query_text && !query_file) {
           tempFile = join(__dirname, 'temp_query_' + Date.now() + '.sql');
@@ -2722,6 +2893,7 @@ const server = http.createServer(async (req, res) => {
         
         // Python 스크립트 실행
         console.log('[API 서버] 실행 명령어:', command);
+        console.log('[API 서버] Python 스크립트 경로:', pythonScript);
         console.log('[API 서버] 큰 파일 분석 시작 (타임아웃: 5분, 버퍼: 50MB)');
         
         const startTime = Date.now();
@@ -2741,7 +2913,10 @@ const server = http.createServer(async (req, res) => {
           stderr = execError.stderr || execError.message || '';
           
           console.error('[API 서버] Python 스크립트 실행 오류:', execError.message);
-          console.error('[API 서버] stderr:', stderr.substring(0, 1000));
+          console.error('[API 서버] 오류 코드:', execError.code);
+          console.error('[API 서버] 오류 시그널:', execError.signal);
+          console.error('[API 서버] stderr 전체:', stderr);
+          console.error('[API 서버] stdout 전체:', stdout);
           
           // 타임아웃 오류인지 확인
           if (execError.code === 'TIMEOUT' || execError.signal === 'SIGTERM') {
@@ -2765,8 +2940,11 @@ const server = http.createServer(async (req, res) => {
           return sendJSON(res, 500, {
             success: false,
             error: `Python 스크립트 실행 오류: ${execError.message}`,
+            errorCode: execError.code,
+            errorSignal: execError.signal,
             stderr: stderr.substring(0, 2000),
-            stdout: stdout.substring(0, 1000)
+            stdout: stdout.substring(0, 1000),
+            suggestion: 'Python 스크립트가 정상적으로 실행되는지 확인하세요. Python이 설치되어 있고 PATH에 등록되어 있는지 확인하세요.'
           });
         }
         
@@ -2781,9 +2959,7 @@ const server = http.createServer(async (req, res) => {
         // 임시 파일 삭제 (나중에 삭제 - 결과 파일 찾은 후)
         let tempFileToDelete = tempFile;
         
-        // 분석 결과 파일 찾기
-        const fs = await import('fs');
-        const path = await import('path');
+        // 분석 결과 파일 찾기 (fs와 path는 이미 위에서 import됨)
         const logsDir = join(__dirname, 'logs', 'sql_analysis');
         
         // 디렉토리가 없으면 생성
@@ -2791,31 +2967,61 @@ const server = http.createServer(async (req, res) => {
           fs.mkdirSync(logsDir, { recursive: true });
         }
         
-        // 가장 최근 생성된 분석 결과 파일 찾기 (최대 5초 전까지)
+        // 가장 최근 생성된 분석 결과 파일 찾기 (최대 30초 전까지 - 시간 범위 확대)
         const now = Date.now();
-        const files = fs.readdirSync(logsDir)
-          .filter(f => f.endsWith('.json') && !f.includes('lineage'))
-          .map(f => {
-            const filePath = join(logsDir, f);
-            const stats = fs.statSync(filePath);
-            return {
-              name: f,
-              path: filePath,
-              time: stats.mtime.getTime()
-            };
-          })
-          .filter(f => (now - f.time) < 5000) // 5초 이내 생성된 파일만
-          .sort((a, b) => b.time - a.time);
+        let files = [];
+        try {
+          const allFiles = fs.readdirSync(logsDir)
+            .filter(f => f.endsWith('.json') && !f.includes('lineage'))
+            .map(f => {
+              const filePath = join(logsDir, f);
+              try {
+                const stats = fs.statSync(filePath);
+                return {
+                  name: f,
+                  path: filePath,
+                  time: stats.mtime.getTime()
+                };
+              } catch (statError) {
+                console.warn(`[API 서버] 파일 정보 읽기 실패 (${f}):`, statError.message);
+                return null;
+              }
+            })
+            .filter(f => f !== null);
+          
+          // 시간 범위를 30초로 확대 (큰 파일 처리 시간 고려)
+          files = allFiles
+            .filter(f => (now - f.time) < 30000) // 30초 이내 생성된 파일만
+            .sort((a, b) => b.time - a.time);
+        } catch (readError) {
+          console.error('[API 서버] 디렉토리 읽기 오류:', readError.message);
+          return sendJSON(res, 500, {
+            success: false,
+            error: `결과 디렉토리를 읽을 수 없습니다: ${readError.message}`,
+            logsDir: logsDir,
+            stderr: stderr.substring(0, 1000),
+            stdout: stdout.substring(0, 1000)
+          });
+        }
         
         console.log('[API 서버] 찾은 결과 파일 수:', files.length);
         if (files.length > 0) {
           console.log('[API 서버] 가장 최근 파일:', files[0].name);
+          console.log('[API 서버] 파일 생성 시간:', new Date(files[0].time).toISOString());
+        } else {
+          // 디렉토리 내 모든 파일 목록 출력 (디버깅용)
+          try {
+            const allFilesInDir = fs.readdirSync(logsDir);
+            console.log('[API 서버] 디렉토리 내 모든 파일:', allFilesInDir);
+            console.log('[API 서버] 현재 시간:', new Date(now).toISOString());
+          } catch (e) {
+            console.error('[API 서버] 디렉토리 목록 읽기 실패:', e.message);
+          }
         }
         
         // 임시 파일 삭제
         if (tempFileToDelete) {
           try {
-            const fs = await import('fs');
             if (fs.existsSync(tempFileToDelete)) {
               fs.unlinkSync(tempFileToDelete);
               console.log('[API 서버] 임시 파일 삭제 완료:', tempFileToDelete);
@@ -2826,18 +3032,50 @@ const server = http.createServer(async (req, res) => {
         }
         
         if (files.length === 0) {
+          // 더 자세한 디버깅 정보 제공
+          let debugInfo = {
+            logsDir: logsDir,
+            logsDirExists: fs.existsSync(logsDir),
+            currentTime: new Date(now).toISOString(),
+            stderr: stderr.substring(0, 2000),
+            stdout: stdout.substring(0, 2000)
+          };
+          
+          // 디렉토리 내 파일 목록 추가
+          try {
+            if (fs.existsSync(logsDir)) {
+              debugInfo.filesInDir = fs.readdirSync(logsDir);
+            }
+          } catch (e) {
+            debugInfo.dirReadError = e.message;
+          }
+          
           return sendJSON(res, 500, {
             success: false,
             error: '분석 결과 파일을 찾을 수 없습니다. Python 스크립트 실행을 확인하세요.',
-            stderr: stderr,
-            stdout: stdout.substring(0, 1000)
+            debug: debugInfo,
+            suggestion: 'Python 스크립트가 정상적으로 실행되었는지 확인하고, logs/sql_analysis 디렉토리에 결과 파일이 생성되었는지 확인하세요.'
           });
         }
         
         // 가장 최근 JSON 파일 읽기
         const latestJsonFile = files[0].path;
-        const jsonContent = fs.readFileSync(latestJsonFile, 'utf-8');
-        const parsedFile = JSON.parse(jsonContent);
+        let jsonContent, parsedFile;
+        try {
+          jsonContent = fs.readFileSync(latestJsonFile, 'utf-8');
+          parsedFile = JSON.parse(jsonContent);
+        } catch (parseError) {
+          console.error('[API 서버] JSON 파일 읽기/파싱 오류:', parseError.message);
+          console.error('[API 서버] 파일 경로:', latestJsonFile);
+          console.error('[API 서버] 파일 내용 (처음 500자):', jsonContent ? jsonContent.substring(0, 500) : 'null');
+          return sendJSON(res, 500, {
+            success: false,
+            error: `분석 결과 파일을 읽거나 파싱할 수 없습니다: ${parseError.message}`,
+            filePath: latestJsonFile,
+            fileContentPreview: jsonContent ? jsonContent.substring(0, 500) : 'null',
+            suggestion: '결과 파일이 손상되었을 수 있습니다. Python 스크립트를 다시 실행해보세요.'
+          });
+        }
         
         // JSON 파일 구조 확인: { "json": {...}, "markdown": "..." } 형태일 수 있음
         const analysisResult = parsedFile.json || parsedFile;

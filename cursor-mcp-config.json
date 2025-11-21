@@ -41,6 +41,18 @@
       "tools": [
         "analyze_sql_query"
       ]
+    },
+    "chrome-devtools": {
+      "command": "npx",
+      "args": ["chrome-devtools-mcp@latest"],
+      "description": "Chrome DevTools MCP 서버 - 브라우저에서 웹페이지 디버깅, 성능 분석, 네트워크 모니터링 등 DevTools 기능 제공",
+      "tools": [
+        "performance_start_trace",
+        "console_get_messages",
+        "network_get_requests",
+        "dom_get_element",
+        "css_get_computed_styles"
+      ]
     }
   }
 }

@@ -34,5 +34,16 @@ data/
 *.sln
 *.sw?
 
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyc
+
+# Temporary SQL analysis files
+sql_analysis/temp_*.txt
+sql_analysis/temp_*.json
+sql_analysis/temp_*.md
+
 
 
