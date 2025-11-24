@@ -44,14 +44,11 @@ MCP 서버가 있는 상황:
 프로젝트에 다음 MCP 서버 파일들이 있어야 합니다:
 
 **Python MCP 서버:**
-- `mcp-unified-server.py` - 도서 추천, 계산기
 - `mcp-error-log-analyzer.py` - 에러 로그 분석
 - `mcp-sql-query-analyzer.py` - SQL 쿼리 분석
 - `mcp-impact-analyzer.py` - 영향도 분석
 - `mcp-voc-server.py` - VOC 자동 대응
-
-**Node.js MCP 서버:**
-- `mcp-server.js` - AI 뉴스 검색, 라디오 음악 정보
+- `mcp-unified-server.py` - 도서 추천, 계산기, AI 기사 검색, 라디오 음악 정보
 
 ### 2. 의존성 설치
 
@@ -63,11 +60,6 @@ pip install mcp sqlparse
 또는:
 ```bash
 pip install -r requirements.txt
-```
-
-**Node.js 패키지:**
-```bash
-npm install
 ```
 
 ### 3. 프로젝트 경로 확인
@@ -92,18 +84,6 @@ npm install
 ```json
 {
   "mcpServers": {
-    "ai-articles-radio-server": {
-      "command": "node",
-      "args": ["C:/test/test02/mcp-server.js"],
-      "cwd": "C:/test/test02",
-      "description": "AI 기사 검색 및 라디오 방송 음악 정보 서버"
-    },
-    "unified-mcp-server": {
-      "command": "python",
-      "args": ["C:/test/test02/mcp-unified-server.py"],
-      "cwd": "C:/test/test02",
-      "description": "덧셈 계산기 및 도서 검색/추천 통합 서버"
-    },
     "error-log-analyzer": {
       "command": "python",
       "args": ["C:/test/test02/mcp-error-log-analyzer.py"],
@@ -116,11 +96,23 @@ npm install
       "cwd": "C:/test/test02",
       "description": "SQL 쿼리 자동 분석 서버"
     },
+    "impact-analyzer": {
+      "command": "python",
+      "args": ["C:/test/test02/mcp-impact-analyzer.py"],
+      "cwd": "C:/test/test02",
+      "description": "테이블/컬럼 변경 영향도 분석 서버"
+    },
     "voc-server": {
       "command": "python",
       "args": ["C:/test/test02/mcp-voc-server.py"],
       "cwd": "C:/test/test02",
       "description": "VOC 자동 대응 MCP 서버"
+    },
+    "unified-mcp-server": {
+      "command": "python",
+      "args": ["C:/test/test02/mcp-unified-server.py"],
+      "cwd": "C:/test/test02",
+      "description": "통합 서버 - 도서 추천, 계산기, AI 기사 검색, 라디오 음악 정보"
     }
   }
 }
@@ -153,16 +145,6 @@ AIPRO의 설정 파일 위치를 확인하세요:
 {
   "mcp": {
     "servers": {
-      "ai-articles-radio-server": {
-        "command": "node",
-        "args": ["C:/test/test02/mcp-server.js"],
-        "cwd": "C:/test/test02"
-      },
-      "unified-mcp-server": {
-        "command": "python",
-        "args": ["C:/test/test02/mcp-unified-server.py"],
-        "cwd": "C:/test/test02"
-      },
       "error-log-analyzer": {
         "command": "python",
         "args": ["C:/test/test02/mcp-error-log-analyzer.py"],
@@ -173,9 +155,19 @@ AIPRO의 설정 파일 위치를 확인하세요:
         "args": ["C:/test/test02/mcp-sql-query-analyzer.py"],
         "cwd": "C:/test/test02"
       },
+      "impact-analyzer": {
+        "command": "python",
+        "args": ["C:/test/test02/mcp-impact-analyzer.py"],
+        "cwd": "C:/test/test02"
+      },
       "voc-server": {
         "command": "python",
         "args": ["C:/test/test02/mcp-voc-server.py"],
+        "cwd": "C:/test/test02"
+      },
+      "unified-mcp-server": {
+        "command": "python",
+        "args": ["C:/test/test02/mcp-unified-server.py"],
         "cwd": "C:/test/test02"
       }
     }
@@ -209,16 +201,6 @@ Claude Desktop의 설정 파일 위치:
 ```json
 {
   "mcpServers": {
-    "ai-articles-radio-server": {
-      "command": "node",
-      "args": ["C:/test/test02/mcp-server.js"],
-      "cwd": "C:/test/test02"
-    },
-    "unified-mcp-server": {
-      "command": "python",
-      "args": ["C:/test/test02/mcp-unified-server.py"],
-      "cwd": "C:/test/test02"
-    },
     "error-log-analyzer": {
       "command": "python",
       "args": ["C:/test/test02/mcp-error-log-analyzer.py"],
@@ -229,9 +211,19 @@ Claude Desktop의 설정 파일 위치:
       "args": ["C:/test/test02/mcp-sql-query-analyzer.py"],
       "cwd": "C:/test/test02"
     },
+    "impact-analyzer": {
+      "command": "python",
+      "args": ["C:/test/test02/mcp-impact-analyzer.py"],
+      "cwd": "C:/test/test02"
+    },
     "voc-server": {
       "command": "python",
       "args": ["C:/test/test02/mcp-voc-server.py"],
+      "cwd": "C:/test/test02"
+    },
+    "unified-mcp-server": {
+      "command": "python",
+      "args": ["C:/test/test02/mcp-unified-server.py"],
       "cwd": "C:/test/test02"
     }
   }
@@ -266,7 +258,7 @@ MCP 프로토콜을 지원하는 다른 AI 도구들도 비슷한 방식으로 �
 
 #### 주요 설정 항목 설명
 
-- **command**: MCP 서버를 실행할 명령어 (`python`, `node` 등)
+- **command**: MCP 서버를 실행할 명령어 (`python` 등)
 - **args**: 명령어에 전달할 인자 (MCP 서버 파일 경로)
 - **cwd**: 작업 디렉토리 (프로젝트 루트 경로)
 
@@ -280,12 +272,11 @@ MCP 프로토콜을 지원하는 다른 AI 도구들도 비슷한 방식으로 �
 
 **Python 서버 테스트:**
 ```bash
+python mcp-error-log-analyzer.py
+python mcp-sql-query-analyzer.py
+python mcp-impact-analyzer.py
+python mcp-voc-server.py
 python mcp-unified-server.py
-```
-
-**Node.js 서버 테스트:**
-```bash
-node mcp-server.js
 ```
 
 정상적으로 실행되면 아무 출력 없이 대기 상태가 됩니다 (stdio 통신).
@@ -293,16 +284,6 @@ node mcp-server.js
 ### 2. AI 도구에서 테스트
 
 설정 후 AI 도구에서 다음 명령어로 테스트하세요:
-
-**덧셈 계산기 테스트:**
-```
-"5와 7을 더해줘"
-```
-
-**도서 추천 테스트:**
-```
-"인공지능 관련 책을 추천해줘"
-```
 
 **SQL 쿼리 분석 테스트:**
 ```
@@ -314,12 +295,42 @@ node mcp-server.js
 "logs/sample-error.log 파일의 에러를 분석해줘"
 ```
 
+**영향도 분석 테스트:**
+```
+"users 테이블의 email 컬럼을 변경하면 어떤 영향이 있나요?"
+```
+
+**VOC 자동 대응 테스트:**
+```
+"SR을 등록해줘"
+```
+
+**덧셈 계산기 테스트:**
+```
+"5와 7을 더해줘"
+```
+
+**도서 추천 테스트:**
+```
+"인공지능 관련 책을 추천해줘"
+```
+
+**AI 기사 검색 테스트:**
+```
+"ChatGPT 관련 기사를 검색해줘"
+```
+
+**라디오 음악 정보 테스트:**
+```
+"KBS 라디오에서 현재 재생 중인 노래를 알려줘"
+```
+
 ### 3. 로그 확인
 
 AI 도구에서 MCP 서버 연결 오류가 발생하면:
 - AI 도구의 로그 파일 확인
 - MCP 서버 파일의 경로가 정확한지 확인
-- Python/Node.js가 올바르게 설치되어 있는지 확인
+- Python이 올바르게 설치되어 있는지 확인
 
 ---
 
@@ -338,16 +349,16 @@ AI 도구에서 MCP 서버 연결 오류가 발생하면:
 **예시:**
 ```json
 {
-  "args": ["C:/Users/My Name/test02/mcp-server.js"],  // ❌ 공백 있음
-  "args": ["\"C:/Users/My Name/test02/mcp-server.js\""]  // ✅ 따옴표로 감싸기
+  "args": ["C:/Users/My Name/test02/mcp-unified-server.py"],  // ❌ 공백 있음
+  "args": ["\"C:/Users/My Name/test02/mcp-unified-server.py\""]  // ✅ 따옴표로 감싸기
 }
 ```
 
 ---
 
-### 문제 2: "Python을 찾을 수 없습니다" 또는 "Node를 찾을 수 없습니다"
+### 문제 2: "Python을 찾을 수 없습니다"
 
-**원인:** Python 또는 Node.js가 설치되지 않았거나 PATH에 등록되지 않았습니다.
+**원인:** Python이 설치되지 않았거나 PATH에 등록되지 않았습니다.
 
 **해결 방법:**
 
@@ -358,14 +369,8 @@ python --version
 python3 --version
 ```
 
-**Node.js 확인:**
-```bash
-node --version
-```
-
 설치되어 있지 않다면:
 - Python: https://www.python.org/downloads/
-- Node.js: https://nodejs.org/
 
 **전체 경로 사용:**
 설정 파일에서 전체 경로를 사용할 수도 있습니다:
@@ -402,7 +407,10 @@ pip install -r requirements.txt
 
 ```bash
 chmod +x mcp-unified-server.py
-chmod +x mcp-server.js
+chmod +x mcp-error-log-analyzer.py
+chmod +x mcp-sql-query-analyzer.py
+chmod +x mcp-impact-analyzer.py
+chmod +x mcp-voc-server.py
 ```
 
 ---
@@ -425,7 +433,7 @@ chmod +x mcp-server.js
 **Windows:**
 ```json
 {
-  "args": ["C:/test/test02/mcp-server.js"],
+  "args": ["C:/test/test02/mcp-unified-server.py"],
   "cwd": "C:/test/test02"
 }
 ```
@@ -433,7 +441,7 @@ chmod +x mcp-server.js
 **Linux/macOS:**
 ```json
 {
-  "args": ["/home/user/test02/mcp-server.js"],
+  "args": ["/home/user/test02/mcp-unified-server.py"],
   "cwd": "/home/user/test02"
 }
 ```
@@ -444,7 +452,7 @@ chmod +x mcp-server.js
 
 ```json
 {
-  "args": ["./mcp-server.js"],
+  "args": ["./mcp-unified-server.py"],
   "cwd": "."
 }
 ```
@@ -456,13 +464,14 @@ chmod +x mcp-server.js
 **다른 AI 도구에서 MCP 서버 사용하기:**
 
 1. ✅ 프로젝트 파일 확인
-2. ✅ 의존성 설치 (`pip install mcp sqlparse`, `npm install`)
+2. ✅ 의존성 설치 (`pip install mcp sqlparse`)
 3. ✅ AI 도구의 설정 파일 찾기
 4. ✅ MCP 서버 설정 추가 (경로 수정 필수!)
 5. ✅ AI 도구 재시작
 6. ✅ 테스트 명령어로 확인
 
 **주요 포인트:**
+- 모든 MCP 서버가 Python으로 구현되어 있습니다
 - 설정 파일의 경로를 실제 프로젝트 경로로 수정해야 합니다
 - Windows는 슬래시(`/`) 사용 권장
 - AI 도구를 재시작해야 설정이 적용됩니다

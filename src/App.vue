@@ -1125,6 +1125,82 @@
 
       <!-- 메인 기능 영역 (좌우 배치) -->
       <div class="main-features-grid">
+
+        <!-- AI 화면 검증 섹션 -->
+        <div class="screen-validation-section">
+          <div class="section-header">
+            <h2>🔍 AI 화면 검증</h2>
+            <p class="section-description">웹 페이지 화면 캡처 및 요소 값 검증</p>
+          </div>
+          <div class="feature-buttons">
+            <div class="button-group-card">
+              <button @click="toggleScreenValidation" class="btn btn-screen-validation" :class="{ active: showScreenValidation }">
+                <div class="button-icon">🔍</div>
+                <div class="button-content">
+                  <div class="button-title">AI 화면 검증</div>
+                  <div class="button-subtitle">URL 접속하여 화면 캡처 및 요소 검증</div>
+                </div>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- AI 데이터 분석 섹션 -->
+        <div class="sql-query-analysis-section">
+          <div class="section-header">
+            <h2>📊 AI 데이터 분석</h2>
+            <p class="section-description">SQL 쿼리 분석 및 테이블 영향도 분석</p>
+          </div>
+          <div class="feature-buttons">
+            <div class="button-group-card">
+              <button @click="toggleSQLQueryAnalysis" class="btn btn-sql-analysis" :class="{ active: showSQLQueryAnalysis }">
+                <div class="button-icon">📊</div>
+                <div class="button-content">
+                  <div class="button-title">AI 데이터 분석</div>
+                  <div class="button-subtitle">쿼리 구조, 성능, 보안 분석 및 최적화 제안</div>
+                </div>
+              </button>
+            </div>
+            <div class="button-group-card">
+              <button @click="toggleImpactAnalysis" class="btn btn-impact-analysis" :class="{ active: showImpactAnalysis }">
+                <div class="button-icon">🔍</div>
+                <div class="button-content">
+                  <div class="button-title">AI 테이블 영향도 분석</div>
+                  <div class="button-subtitle">테이블/컬럼 변경 시 프로그램, 화면, 배치 영향도 분석</div>
+                </div>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- AI 에러로그분석 섹션 -->
+        <div class="error-log-analysis-section">
+          <div class="section-header">
+            <h2>🔧 AI 에러로그분석</h2>
+            <p class="section-description">에러 로그 파일을 분석하여 원인 파악 및 해결 방안 제시</p>
+          </div>
+          <div class="feature-buttons">
+            <div class="button-group-card">
+              <button @click="toggleErrorLogAnalysis" class="btn btn-error-log-analysis" :class="{ active: showErrorLogAnalysis }">
+                <div class="button-icon">🔧</div>
+                <div class="button-content">
+                  <div class="button-title">AI 에러로그분석</div>
+                  <div class="button-subtitle">에러 로그 분석 및 조치 방법 제안</div>
+                </div>
+              </button>
+            </div>
+            <div class="button-group-card">
+              <button @click="openErrorLogStatusModal" class="btn btn-error-log-status" :class="{ active: showErrorLogStatusModal }">
+                <div class="button-icon">📋</div>
+                <div class="button-content">
+                  <div class="button-title">AI 에러 로그 현황</div>
+                  <div class="button-subtitle">저장된 에러 로그 최신순 조회</div>
+                </div>
+              </button>
+            </div>
+          </div>
+        </div>
+
         <!-- 기사 검색 섹션 (바운더리로 묶음) -->
         <div class="article-search-section">
           <div class="section-header">
@@ -1212,81 +1288,6 @@
                 <div class="button-content">
                   <div class="button-title">실시간 도서 수집 현황</div>
                   <div class="button-subtitle">수집된 도서 현황</div>
-                </div>
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <!-- AI 화면 검증 섹션 -->
-        <div class="screen-validation-section">
-          <div class="section-header">
-            <h2>🔍 AI 화면 검증</h2>
-            <p class="section-description">웹 페이지 화면 캡처 및 요소 값 검증</p>
-          </div>
-          <div class="feature-buttons">
-            <div class="button-group-card">
-              <button @click="toggleScreenValidation" class="btn btn-screen-validation" :class="{ active: showScreenValidation }">
-                <div class="button-icon">🔍</div>
-                <div class="button-content">
-                  <div class="button-title">AI 화면 검증</div>
-                  <div class="button-subtitle">URL 접속하여 화면 캡처 및 요소 검증</div>
-                </div>
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <!-- AI 데이터 분석 섹션 -->
-        <div class="sql-query-analysis-section">
-          <div class="section-header">
-            <h2>📊 AI 데이터 분석</h2>
-            <p class="section-description">SQL 쿼리 분석 및 테이블 영향도 분석</p>
-          </div>
-          <div class="feature-buttons">
-            <div class="button-group-card">
-              <button @click="toggleSQLQueryAnalysis" class="btn btn-sql-analysis" :class="{ active: showSQLQueryAnalysis }">
-                <div class="button-icon">📊</div>
-                <div class="button-content">
-                  <div class="button-title">AI 데이터 분석</div>
-                  <div class="button-subtitle">쿼리 구조, 성능, 보안 분석 및 최적화 제안</div>
-                </div>
-              </button>
-            </div>
-            <div class="button-group-card">
-              <button @click="toggleImpactAnalysis" class="btn btn-impact-analysis" :class="{ active: showImpactAnalysis }">
-                <div class="button-icon">🔍</div>
-                <div class="button-content">
-                  <div class="button-title">AI 테이블 영향도 분석</div>
-                  <div class="button-subtitle">테이블/컬럼 변경 시 프로그램, 화면, 배치 영향도 분석</div>
-                </div>
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <!-- AI 에러로그분석 섹션 -->
-        <div class="error-log-analysis-section">
-          <div class="section-header">
-            <h2>🔧 AI 에러로그분석</h2>
-            <p class="section-description">에러 로그 파일을 분석하여 원인 파악 및 해결 방안 제시</p>
-          </div>
-          <div class="feature-buttons">
-            <div class="button-group-card">
-              <button @click="toggleErrorLogAnalysis" class="btn btn-error-log-analysis" :class="{ active: showErrorLogAnalysis }">
-                <div class="button-icon">🔧</div>
-                <div class="button-content">
-                  <div class="button-title">AI 에러로그분석</div>
-                  <div class="button-subtitle">에러 로그 분석 및 조치 방법 제안</div>
-                </div>
-              </button>
-            </div>
-            <div class="button-group-card">
-              <button @click="openErrorLogStatusModal" class="btn btn-error-log-status" :class="{ active: showErrorLogStatusModal }">
-                <div class="button-icon">📋</div>
-                <div class="button-content">
-                  <div class="button-title">AI 에러 로그 현황</div>
-                  <div class="button-subtitle">저장된 에러 로그 최신순 조회</div>
                 </div>
               </button>
             </div>
@@ -9531,18 +9532,14 @@ onMounted(() => {
 
 /* AI 화면 검증 섹션 */
 .screen-validation-section {
-  padding: 2rem;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 50%, #f093fb 100%);
-  border-radius: 24px;
-  box-shadow: 
-    0 20px 60px rgba(102, 126, 234, 0.3),
-    0 0 0 1px rgba(255, 255, 255, 0.1),
-    inset 0 1px 0 rgba(255, 255, 255, 0.2);
-  border: 2px solid rgba(255, 255, 255, 0.3);
+  padding: 1rem;
+  background: linear-gradient(135deg, #ffffff 0%, #f5f7fa 50%, #e8ecf1 100%);
+  border-radius: 16px;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.08), 0 0 0 1px rgba(0, 0, 0, 0.05);
+  border: 2px solid rgba(255, 255, 255, 0.8);
   position: relative;
   overflow: hidden;
   height: fit-content;
-  backdrop-filter: blur(10px);
 }
 
 .screen-validation-section::before {
@@ -9551,82 +9548,38 @@ onMounted(() => {
   top: 0;
   left: 0;
   right: 0;
-  height: 5px;
-  background: linear-gradient(90deg, 
-    #667eea 0%, 
-    #764ba2 25%, 
-    #f093fb 50%, 
-    #764ba2 75%, 
-    #667eea 100%);
-  background-size: 200% 100%;
-  animation: shimmer 3s ease-in-out infinite;
-}
-
-@keyframes shimmer {
-  0%, 100% { background-position: 0% 50%; }
-  50% { background-position: 100% 50%; }
-}
-
-.screen-validation-section::after {
-  content: '';
-  position: absolute;
-  top: -50%;
-  right: -50%;
-  width: 200%;
-  height: 200%;
-  background: radial-gradient(circle, rgba(255, 255, 255, 0.15) 0%, transparent 70%);
-  pointer-events: none;
-  animation: pulse 4s ease-in-out infinite;
-}
-
-@keyframes pulse {
-  0%, 100% { opacity: 0.3; transform: scale(1); }
-  50% { opacity: 0.6; transform: scale(1.1); }
+  height: 4px;
+  background: linear-gradient(90deg, #667eea 0%, #f093fb 50%, #f5576c 100%);
 }
 
 .btn-screen-validation {
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.2) 0%, rgba(255, 255, 255, 0.1) 100%);
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   color: white;
-  border: 2px solid rgba(255, 255, 255, 0.4);
-  backdrop-filter: blur(10px);
-  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-  box-shadow: 
-    0 4px 15px rgba(0, 0, 0, 0.2),
-    inset 0 1px 0 rgba(255, 255, 255, 0.3);
+  border: none;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
 }
 
 .btn-screen-validation:hover {
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.3) 0%, rgba(255, 255, 255, 0.2) 100%);
-  transform: translateY(-3px) scale(1.02);
-  box-shadow: 
-    0 8px 25px rgba(102, 126, 234, 0.5),
-    inset 0 1px 0 rgba(255, 255, 255, 0.4);
-  border-color: rgba(255, 255, 255, 0.6);
+  background: linear-gradient(135deg, #764ba2 0%, #667eea 100%);
+  transform: translateY(-4px);
+  box-shadow: 0 10px 30px rgba(102, 126, 234, 0.5);
 }
 
 .btn-screen-validation.active {
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.35) 0%, rgba(255, 255, 255, 0.25) 100%);
-  box-shadow: 
-    0 6px 20px rgba(102, 126, 234, 0.6),
-    inset 0 2px 4px rgba(255, 255, 255, 0.3),
-    inset 0 -2px 4px rgba(0, 0, 0, 0.1);
-  border-color: rgba(255, 255, 255, 0.7);
+  box-shadow: 0 12px 40px rgba(102, 126, 234, 0.6);
 }
 
 /* SQL 쿼리 분석 섹션 */
 .sql-query-analysis-section {
-  padding: 2rem;
-  background: linear-gradient(135deg, #4a90e2 0%, #357abd 50%, #2e5c8a 100%);
-  border-radius: 24px;
-  box-shadow: 
-    0 20px 60px rgba(74, 144, 226, 0.3),
-    0 0 0 1px rgba(255, 255, 255, 0.1),
-    inset 0 1px 0 rgba(255, 255, 255, 0.2);
-  border: 2px solid rgba(255, 255, 255, 0.3);
+  padding: 1rem;
+  background: linear-gradient(135deg, #ffffff 0%, #f5f7fa 50%, #e8ecf1 100%);
+  border-radius: 16px;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.08), 0 0 0 1px rgba(0, 0, 0, 0.05);
+  border: 2px solid rgba(255, 255, 255, 0.8);
   position: relative;
   overflow: hidden;
   height: fit-content;
-  backdrop-filter: blur(10px);
 }
 
 .sql-query-analysis-section::before {
@@ -9635,56 +9588,26 @@ onMounted(() => {
   top: 0;
   left: 0;
   right: 0;
-  height: 5px;
-  background: linear-gradient(90deg, 
-    #4a90e2 0%, 
-    #357abd 25%, 
-    #5ba3f5 50%, 
-    #357abd 75%, 
-    #4a90e2 100%);
-  background-size: 200% 100%;
-  animation: shimmer 3s ease-in-out infinite;
-}
-
-.sql-query-analysis-section::after {
-  content: '';
-  position: absolute;
-  top: -50%;
-  right: -50%;
-  width: 200%;
-  height: 200%;
-  background: radial-gradient(circle, rgba(255, 255, 255, 0.15) 0%, transparent 70%);
-  pointer-events: none;
-  animation: pulse 4s ease-in-out infinite;
+  height: 4px;
+  background: linear-gradient(90deg, #667eea 0%, #f093fb 50%, #f5576c 100%);
 }
 
 .btn-sql-analysis {
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.2) 0%, rgba(255, 255, 255, 0.1) 100%);
+  background: linear-gradient(135deg, #4a90e2 0%, #357abd 100%);
   color: white;
-  border: 2px solid rgba(255, 255, 255, 0.4);
-  backdrop-filter: blur(10px);
-  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-  box-shadow: 
-    0 4px 15px rgba(0, 0, 0, 0.2),
-    inset 0 1px 0 rgba(255, 255, 255, 0.3);
+  border: none;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 15px rgba(74, 144, 226, 0.3);
 }
 
 .btn-sql-analysis:hover {
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.3) 0%, rgba(255, 255, 255, 0.2) 100%);
-  transform: translateY(-3px) scale(1.02);
-  box-shadow: 
-    0 8px 25px rgba(74, 144, 226, 0.5),
-    inset 0 1px 0 rgba(255, 255, 255, 0.4);
-  border-color: rgba(255, 255, 255, 0.6);
+  background: linear-gradient(135deg, #357abd 0%, #4a90e2 100%);
+  transform: translateY(-4px);
+  box-shadow: 0 10px 30px rgba(74, 144, 226, 0.5);
 }
 
 .btn-sql-analysis.active {
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.35) 0%, rgba(255, 255, 255, 0.25) 100%);
-  box-shadow: 
-    0 6px 20px rgba(74, 144, 226, 0.6),
-    inset 0 2px 4px rgba(255, 255, 255, 0.3),
-    inset 0 -2px 4px rgba(0, 0, 0, 0.1);
-  border-color: rgba(255, 255, 255, 0.7);
+  box-shadow: 0 12px 40px rgba(74, 144, 226, 0.6);
 }
 
 /* AI 테이블 영향도 분석 버튼 - 연두색 */
@@ -9719,19 +9642,14 @@ onMounted(() => {
 
 /* AI 에러로그분석 섹션 */
 .error-log-analysis-section {
-  padding: 2rem;
-  background: linear-gradient(135deg, #ff6b6b 0%, #ee5a6f 50%, #c44569 100%);
-  border-radius: 24px;
-  box-shadow: 
-    0 20px 60px rgba(255, 107, 107, 0.3),
-    0 0 0 1px rgba(255, 255, 255, 0.1),
-    inset 0 1px 0 rgba(255, 255, 255, 0.2);
-  border: 2px solid rgba(255, 255, 255, 0.3);
+  padding: 1rem;
+  background: linear-gradient(135deg, #ffffff 0%, #f5f7fa 50%, #e8ecf1 100%);
+  border-radius: 16px;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.08), 0 0 0 1px rgba(0, 0, 0, 0.05);
+  border: 2px solid rgba(255, 255, 255, 0.8);
   position: relative;
   overflow: hidden;
   height: fit-content;
-  backdrop-filter: blur(10px);
-  margin-top: 1.5rem;
 }
 
 .error-log-analysis-section::before {
@@ -9740,86 +9658,45 @@ onMounted(() => {
   top: 0;
   left: 0;
   right: 0;
-  height: 5px;
-  background: linear-gradient(90deg, 
-    #ff6b6b 0%, 
-    #ee5a6f 25%, 
-    #ff8787 50%, 
-    #ee5a6f 75%, 
-    #ff6b6b 100%);
-  background-size: 200% 100%;
-  animation: shimmer 3s ease-in-out infinite;
-}
-
-.error-log-analysis-section::after {
-  content: '';
-  position: absolute;
-  top: -50%;
-  right: -50%;
-  width: 200%;
-  height: 200%;
-  background: radial-gradient(circle, rgba(255, 255, 255, 0.15) 0%, transparent 70%);
-  pointer-events: none;
-  animation: pulse 4s ease-in-out infinite;
+  height: 4px;
+  background: linear-gradient(90deg, #667eea 0%, #f093fb 50%, #f5576c 100%);
 }
 
 .btn-error-log-analysis {
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.2) 0%, rgba(255, 255, 255, 0.1) 100%);
+  background: linear-gradient(135deg, #ff6b6b 0%, #ee5a6f 100%);
   color: white;
-  border: 2px solid rgba(255, 255, 255, 0.4);
-  backdrop-filter: blur(10px);
-  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-  box-shadow: 
-    0 4px 15px rgba(0, 0, 0, 0.2),
-    inset 0 1px 0 rgba(255, 255, 255, 0.3);
+  border: none;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 15px rgba(255, 107, 107, 0.3);
 }
 
 .btn-error-log-analysis:hover {
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.3) 0%, rgba(255, 255, 255, 0.2) 100%);
-  transform: translateY(-3px) scale(1.02);
-  box-shadow: 
-    0 8px 25px rgba(255, 107, 107, 0.5),
-    inset 0 1px 0 rgba(255, 255, 255, 0.4);
-  border-color: rgba(255, 255, 255, 0.6);
+  background: linear-gradient(135deg, #ee5a6f 0%, #ff6b6b 100%);
+  transform: translateY(-4px);
+  box-shadow: 0 10px 30px rgba(255, 107, 107, 0.5);
 }
 
 .btn-error-log-analysis.active {
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.35) 0%, rgba(255, 255, 255, 0.25) 100%);
-  box-shadow: 
-    0 6px 20px rgba(255, 107, 107, 0.6),
-    inset 0 2px 4px rgba(255, 255, 255, 0.3),
-    inset 0 -2px 4px rgba(0, 0, 0, 0.1);
-  border-color: rgba(255, 255, 255, 0.7);
+  box-shadow: 0 12px 40px rgba(255, 107, 107, 0.6);
 }
 
 /* AI 에러 로그 현황 버튼 - 에러 로그 분석과 동일한 스타일 */
 .btn-error-log-status {
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.2) 0%, rgba(255, 255, 255, 0.1) 100%);
+  background: linear-gradient(135deg, #ff6b6b 0%, #ee5a6f 100%);
   color: white;
-  border: 2px solid rgba(255, 255, 255, 0.4);
-  backdrop-filter: blur(10px);
-  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-  box-shadow: 
-    0 4px 15px rgba(0, 0, 0, 0.2),
-    inset 0 1px 0 rgba(255, 255, 255, 0.3);
+  border: none;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 15px rgba(255, 107, 107, 0.3);
 }
 
 .btn-error-log-status:hover {
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.3) 0%, rgba(255, 255, 255, 0.2) 100%);
-  transform: translateY(-3px) scale(1.02);
-  box-shadow: 
-    0 8px 25px rgba(255, 107, 107, 0.5),
-    inset 0 1px 0 rgba(255, 255, 255, 0.4);
-  border-color: rgba(255, 255, 255, 0.6);
+  background: linear-gradient(135deg, #ee5a6f 0%, #ff6b6b 100%);
+  transform: translateY(-4px);
+  box-shadow: 0 10px 30px rgba(255, 107, 107, 0.5);
 }
 
 .btn-error-log-status.active {
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.35) 0%, rgba(255, 255, 255, 0.25) 100%);
-  box-shadow: 
-    0 6px 20px rgba(255, 107, 107, 0.6),
-    inset 0 2px 4px rgba(255, 255, 255, 0.3),
-    inset 0 -2px 4px rgba(0, 0, 0, 0.1);
-  border-color: rgba(255, 255, 255, 0.7);
+  box-shadow: 0 12px 40px rgba(255, 107, 107, 0.6);
 }
 
 /* 에러 로그 분석 컨테이너 */
