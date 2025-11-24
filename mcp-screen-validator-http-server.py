@@ -58,29 +58,43 @@ def get_browser_lock():
 
 def run_async_safely(coro, timeout=120.0):
     """안전하게 비동기 함수를 실행합니다."""
-    try:
-        # 실행 중인 이벤트 루프 확인
-        loop = asyncio.get_running_loop()
-        # 이미 실행 중인 루프가 있으면 새 스레드에서 실행
-        import concurrent.futures
-        import threading
-        
-        def run_in_thread():
-            new_loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(new_loop)
+    import concurrent.futures
+    import threading
+    
+    def run_in_thread():
+        """새 스레드에서 이벤트 루프를 생성하고 실행합니다."""
+        new_loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(new_loop)
+        try:
+            return new_loop.run_until_complete(
+                asyncio.wait_for(coro, timeout=timeout)
+            )
+        except asyncio.TimeoutError:
+            raise Exception(f"비동기 함수 실행 타임아웃 ({timeout}초 초과)")
+        except Exception as e:
+            raise e
+        finally:
             try:
-                return new_loop.run_until_complete(
-                    asyncio.wait_for(coro, timeout=timeout)
-                )
+                # 진행 중인 작업 정리
+                pending = asyncio.all_tasks(new_loop)
+                for task in pending:
+                    task.cancel()
+                if pending:
+                    new_loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
+            except:
+                pass
             finally:
                 new_loop.close()
-        
-        with concurrent.futures.ThreadPoolExecutor() as executor:
+    
+    # 항상 새 스레드에서 실행 (HTTP 서버의 동기 컨텍스트와 분리)
+    try:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
             future = executor.submit(run_in_thread)
             return future.result(timeout=timeout + 10)
-    except RuntimeError:
-        # 실행 중인 루프가 없으면 직접 실행
-        return asyncio.run(asyncio.wait_for(coro, timeout=timeout))
+    except concurrent.futures.TimeoutError:
+        raise Exception(f"스레드 실행 타임아웃 ({timeout + 10}초 초과)")
+    except Exception as e:
+        raise e
 
 async def get_browser() -> Browser:
     """브라우저 인스턴스를 가져오거나 생성합니다."""
@@ -284,10 +298,18 @@ async def interact_and_get_result(
         if browser is None:
             raise Exception("브라우저 인스턴스를 생성할 수 없습니다.")
         
-        context = await browser.new_context(
-            viewport={"width": 1920, "height": 1080},
-            proxy={"server": PROXY_URL}
-        )
+        # 프록시 설정을 포함한 브라우저 컨텍스트 생성 (프록시가 필요한 경우에만)
+        context_options = {
+            "viewport": {"width": 1920, "height": 1080}
+        }
+        # 프록시 설정이 있으면 추가 (프록시가 필요 없는 경우도 있음)
+        try:
+            if PROXY_URL and PROXY_URL.strip():
+                context_options["proxy"] = {"server": PROXY_URL}
+        except:
+            pass  # 프록시 설정 실패 시 무시
+        
+        context = await browser.new_context(**context_options)
         
         if context is None:
             raise Exception("브라우저 컨텍스트를 생성할 수 없습니다.")
@@ -418,11 +440,18 @@ async def validate_screen(url: str, selector: str | None, expected_value: str | 
         if browser is None:
             raise Exception("브라우저 인스턴스를 생성할 수 없습니다.")
         
-        # 프록시 설정을 포함한 브라우저 컨텍스트 생성
-        context = await browser.new_context(
-            viewport={"width": 1920, "height": 1080},
-            proxy={"server": PROXY_URL}
-        )
+        # 프록시 설정을 포함한 브라우저 컨텍스트 생성 (프록시가 필요한 경우에만)
+        context_options = {
+            "viewport": {"width": 1920, "height": 1080}
+        }
+        # 프록시 설정이 있으면 추가 (프록시가 필요 없는 경우도 있음)
+        try:
+            if PROXY_URL and PROXY_URL.strip():
+                context_options["proxy"] = {"server": PROXY_URL}
+        except:
+            pass  # 프록시 설정 실패 시 무시
+        
+        context = await browser.new_context(**context_options)
         
         if context is None:
             raise Exception("브라우저 컨텍스트를 생성할 수 없습니다.")
@@ -523,11 +552,18 @@ async def capture_screen_only(url: str, selector: str | None) -> dict:
         if browser is None:
             raise Exception("브라우저 인스턴스를 생성할 수 없습니다.")
         
-        # 프록시 설정을 포함한 브라우저 컨텍스트 생성
-        context = await browser.new_context(
-            viewport={"width": 1920, "height": 1080},
-            proxy={"server": PROXY_URL}
-        )
+        # 프록시 설정을 포함한 브라우저 컨텍스트 생성 (프록시가 필요한 경우에만)
+        context_options = {
+            "viewport": {"width": 1920, "height": 1080}
+        }
+        # 프록시 설정이 있으면 추가 (프록시가 필요 없는 경우도 있음)
+        try:
+            if PROXY_URL and PROXY_URL.strip():
+                context_options["proxy"] = {"server": PROXY_URL}
+        except:
+            pass  # 프록시 설정 실패 시 무시
+        
+        context = await browser.new_context(**context_options)
         
         if context is None:
             raise Exception("브라우저 컨텍스트를 생성할 수 없습니다.")
@@ -603,6 +639,7 @@ class ScreenValidationHandler(BaseHTTPRequestHandler):
     
     def do_POST(self):
         """POST 요청 처리"""
+        response = None
         response_sent = False
         try:
             # 요청 본문 읽기
@@ -716,22 +753,46 @@ class ScreenValidationHandler(BaseHTTPRequestHandler):
                     response_sent = True
             
             # CORS 헤더 설정 및 응답 전송
-            if not response_sent:
+            if not response_sent or response is None:
                 response = json.dumps({
                     "success": False,
                     "error": "응답을 생성하지 못했습니다."
                 }, ensure_ascii=False)
+                response_sent = True
             
-            self.send_response(200)
-            self.send_header('Content-Type', 'application/json; charset=utf-8')
-            self.send_header('Access-Control-Allow-Origin', '*')
-            self.send_header('Access-Control-Allow-Methods', 'POST, OPTIONS')
-            self.send_header('Access-Control-Allow-Headers', 'Content-Type')
-            self.end_headers()
-            
-            self.wfile.write(response.encode('utf-8'))
-            self.wfile.flush()
-            print(f"[화면 검증 서버] 응답 전송 완료: {self.path}", file=sys.stderr)
+            # 응답 전송
+            if response:
+                try:
+                    self.send_response(200)
+                    self.send_header('Content-Type', 'application/json; charset=utf-8')
+                    self.send_header('Access-Control-Allow-Origin', '*')
+                    self.send_header('Access-Control-Allow-Methods', 'POST, OPTIONS')
+                    self.send_header('Access-Control-Allow-Headers', 'Content-Type')
+                    self.end_headers()
+                    
+                    response_bytes = response.encode('utf-8')
+                    self.wfile.write(response_bytes)
+                    self.wfile.flush()
+                    print(f"[화면 검증 서버] 응답 전송 완료: {self.path} (길이: {len(response_bytes)} bytes)", file=sys.stderr)
+                except Exception as send_error:
+                    print(f"[화면 검증 서버] 응답 전송 오류: {send_error}", file=sys.stderr)
+                    import traceback
+                    print(f"[화면 검증 서버] 상세:\n{traceback.format_exc()}", file=sys.stderr)
+            else:
+                # 응답이 생성되지 않은 경우
+                error_response = json.dumps({
+                    "success": False,
+                    "error": "서버 내부 오류: 응답을 생성하지 못했습니다."
+                }, ensure_ascii=False)
+                try:
+                    self.send_response(500)
+                    self.send_header('Content-Type', 'application/json; charset=utf-8')
+                    self.send_header('Access-Control-Allow-Origin', '*')
+                    self.end_headers()
+                    self.wfile.write(error_response.encode('utf-8'))
+                    self.wfile.flush()
+                except:
+                    pass
         
         except json.JSONDecodeError as e:
             error_msg = f"JSON 파싱 오류: {str(e)}"
