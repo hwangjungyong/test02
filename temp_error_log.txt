@@ -1,0 +1,144 @@
+2024-01-20T14:23:15.789Z ERROR: Database connection failed
+File: C:/test/test02/database.js
+Line: 45
+Function: initDatabase
+Error: SQLite database file not found or corrupted
+Details: Cannot open database file at C:/test/test02/data/database.db
+Stack trace:
+    at Database.initDatabase (C:/test/test02/database.js:45:12)
+    at Object.<anonymous> (C:/test/test02/api-server.js:38:5)
+    at Module._compile (node:internal/modules/cjs/loader:1378:30)
+Connection string: sqlite://C:/test/test02/data/database.db
+User: system
+Request ID: req-abc123def456
+
+2024-01-20T14:25:32.456Z ERROR: API request failed - CORS error
+File: C:/test/test02/src/services/api.js
+Line: 78
+Function: fetchNews
+Error: CORS policy blocked request
+Details: Access to fetch at 'http://localhost:3001/api/news?q=AI' from origin 'http://localhost:5173' has been blocked by CORS policy
+Request URL: http://localhost:3001/api/news?q=AI
+Method: GET
+Headers: Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+User ID: 12345
+Session ID: sess-xyz789
+
+2024-01-20T14:27:18.234Z ERROR: SQL query execution failed
+File: C:/test/test02/database.js
+Line: 1026
+Function: errorLogsDB.findAll
+Error: SQLITE_ERROR: no such column: system_type
+Details: SELECT * FROM error_logs WHERE system_type = 'gcp_json' ORDER BY created_at DESC LIMIT 100
+Table: error_logs
+Query: SELECT * FROM error_logs WHERE system_type = 'gcp_json' ORDER BY created_at DESC LIMIT 100
+Database: C:/test/test02/data/database.db
+Stack trace:
+    at Database.prepare (C:/test/test02/database.js:1026:15)
+    at errorLogsDB.findAll (C:/test/test02/database.js:1026:8)
+    at Object.<anonymous> (C:/test/test02/api-server.js:3970:5)
+
+2024-01-20T14:29:45.123Z ERROR: Authentication token expired
+File: C:/test/test02/api-server.js
+Line: 234
+Function: verifyToken
+Error: JWT token expired
+Details: Token expired at 2024-01-20T14:25:00.000Z, current time: 2024-01-20T14:29:45.123Z
+Token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOjEyMzQ1LCJpYXQiOjE3MDU3MzE1MDAsImV4cCI6MTcwNTczNTEwMH0...
+User ID: 12345
+Endpoint: /api/user/profile
+IP Address: 192.168.1.100
+User Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+
+2024-01-20T14:31:22.567Z ERROR: External API timeout
+File: C:/test/test02/api-server.js
+Line: 140
+Function: makeRequest
+Error: Request timeout after 30000ms
+Details: HTTPS request to https://newsapi.org/v2/everything?q=AI&apiKey=6944bc431cbf4988857f3cb35b4decc6 timed out
+Request URL: https://newsapi.org/v2/everything?q=AI
+Method: GET
+Timeout: 30000ms
+Retry count: 3
+Proxy: http://70.10.15.10:8080
+Stack trace:
+    at Timeout._onTimeout (C:/test/test02/api-server.js:199:20)
+    at listOnTimeout (node:internal/timers:569:17)
+    at processTimers (node:internal/timers:507:7)
+
+2024-01-20T14:33:08.890Z ERROR: File system error - permission denied
+File: C:/test/test02/mcp-error-log-analyzer.py
+Line: 748
+Function: call_tool
+Error: Permission denied: cannot read log file
+Details: [Errno 13] Permission denied: 'C:/test/test02/logs/app-error.log'
+File path: C:/test/test02/logs/app-error.log
+Mode: r
+User: SYSTEM
+Process: python.exe (PID: 12345)
+Stack trace:
+    at FileNotFoundError (C:/test/test02/mcp-error-log-analyzer.py:748:15)
+    at call_tool (C:/test/test02/mcp-error-log-analyzer.py:1031:8)
+    at analyze_error_logs (C:/test/test02/mcp-error-log-analyzer.py:987:5)
+
+2024-01-20T14:35:41.234Z ERROR: Memory allocation failed
+File: C:/test/test02/api-server.js
+Line: 3970
+Function: errorLogsDB.findAll
+Error: JavaScript heap out of memory
+Details: Allocated heap size: 512MB, Used: 510MB, Requested: 5MB
+Process: node.exe (PID: 6789)
+Memory usage: 510MB / 512MB
+Query result size: 50000 records
+Table: error_logs
+Stack trace:
+    at Array.push (native)
+    at errorLogsDB.findAll (C:/test/test02/api-server.js:3970:15)
+    at Object.<anonymous> (C:/test/test02/api-server.js:3960:5)
+FATAL: Process will be terminated
+
+2024-01-20T14:37:15.678Z ERROR: JSON parsing error
+File: C:/test/test02/src/App.vue
+Line: 3709
+Function: loadErrorLogs
+Error: Unexpected token '}' in JSON at position 1234
+Details: Failed to parse API response as JSON
+Response: {"success":true,"result":[{"id":1,"log_content":"...","parsed_data":"{invalid json}"}],"count":1}
+API Endpoint: /api/error-log/history
+Status Code: 200
+Content-Type: application/json
+Stack trace:
+    at JSON.parse (native)
+    at loadErrorLogs (C:/test/test02/src/App.vue:3709:15)
+    at watch callback (C:/test/test02/src/App.vue:3770:5)
+
+2024-01-20T14:39:52.345Z ERROR: Database constraint violation
+File: C:/test/test02/database.js
+Line: 1066
+Function: errorLogsDB.create
+Error: SQLITE_CONSTRAINT: UNIQUE constraint failed: error_logs.id
+Details: INSERT INTO error_logs (log_content, log_type, parsed_data, system_type, severity, resource_type, service_name, file_path, line_number, error_type, error_category, timestamp, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+Table: error_logs
+Constraint: PRIMARY KEY (id)
+Duplicate ID: 12345
+Stack trace:
+    at Database.prepare (C:/test/test02/database.js:1066:15)
+    at errorLogsDB.create (C:/test/test02/database.js:1066:8)
+    at Object.<anonymous> (C:/test/test02/api-server.js:3941:5)
+
+2024-01-20T14:41:28.901Z ERROR: Network connection refused
+File: C:/test/test02/api-server.js
+Line: 144
+Function: makeRequest
+Error: ECONNREFUSED - Connection refused
+Details: Failed to connect to https://ws.audioscrobbler.com/2.0/?method=track.getsimilar&api_key=8d8e2e5d0c3b1b95499e94331b8a211e&track=Dynamite&artist=BTS&format=json
+Host: ws.audioscrobbler.com
+Port: 443
+Proxy: http://70.10.15.10:8080
+Error code: ECONNREFUSED
+Retry attempt: 3/3
+Stack trace:
+    at TLSSocket.socket.onerror (C:/test/test02/api-server.js:185:15)
+    at TLSSocket.emit (node:events:515:28)
+    at emitErrorNT (node:internal/streams/destroy:151:8)
+    at processTicksAndRejections (node:internal/process_task_queues:82:21)

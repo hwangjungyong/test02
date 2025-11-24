@@ -1,7 +1,10 @@
 # 🐳 Docker 구현 내역 완전 가이드
 
 **작성일**: 2025년 1월  
+**버전**: 2.0.0 (MCP 서버 통합 버전)
 **목적**: 프로젝트의 Docker 구현 내역과 이해 방법, 사용 이유 설명
+
+> **✅ MCP 서버 통합 완료**: 모든 주요 기능이 MCP 서버로 제공되며, Docker 이미지에도 포함됩니다.
 
 ---
 
@@ -27,8 +30,8 @@
 - **프랜차이즈의 각 가게**라고 생각하세요!
 - 우리 프로젝트는 4개 가게를 운영해요:
   1. Frontend 가게 (5173번 주소) - 손님이 보는 곳
-  2. Backend 가게 (3001번 주소) - 실제 일을 처리하는 곳
-  3. Python MCP 가게 (내부) - AI와 대화하는 곳
+  2. Backend 가게 (3001번 주소) - 실제 일을 처리하는 곳 (MCP 서버 통합)
+  3. Python MCP 가게 (내부) - AI와 대화하는 곳 (에러 로그, SQL 쿼리, 영향도 분석)
   4. Python HTTP 가게 (3002번 주소) - 화면을 확인하는 곳
 
 **왜 사용하나요?**
@@ -141,11 +144,13 @@ Docker를 **음식점 프랜차이즈**라고 생각해보세요!
 2. Backend 가게 (3001번 주소):
    - 실제 일을 처리하는 주방
    - 데이터를 저장하고 가져오는 곳
+   - ✅ MCP 서버 통합: 뉴스 검색 등 주요 기능을 MCP 서버를 통해 제공
    - 독립적으로 작동함
    - 이 가게가 망가져도 다른 가게는 괜찮음
 
 3. Python MCP 가게 (내부):
    - AI와 대화하는 특별한 가게
+   - 에러 로그 분석, SQL 쿼리 분석, 영향도 분석 등 제공
    - 밖에서는 못 봄 (내부 통신만)
    - 독립적으로 작동함
 
@@ -249,11 +254,19 @@ Docker를 **음식점 프랜차이즈**라고 생각해보세요!
    - 역할: 데이터를 저장하고 가져옴
    - 예시: 사용자가 로그인하면, 여기서 확인하고 저장함
    - Frontend가 "사용자 정보 좀 줘!"라고 요청하면 여기서 처리함!
+   - ✅ MCP 서버 통합: 뉴스 검색 등 주요 기능을 MCP 서버를 통해 제공
+   - MCP 서버 파일 포함 (`mcp-server.js`)
 
 3. Python MCP (내부) - AI와 대화하는 특별한 가게
    - 역할: AI와 대화하는 서버
    - 예시: ChatGPT 같은 AI와 대화할 때 사용함
    - 밖에서는 못 봄 (보안을 위해 내부 통신만 함)
+   - ✅ 모든 Python MCP 서버 포함:
+     - 에러 로그 분석 (`mcp-error-log-analyzer.py`)
+     - SQL 쿼리 분석 (`mcp-sql-query-analyzer.py`)
+     - 영향도 분석 (`mcp-impact-analyzer.py`)
+     - 도서 추천 (`mcp-unified-server.py`)
+     - 화면 검증 (`mcp-screen-validator-http-server.py`)
 
 4. Python HTTP (3002번 주소) - 화면을 확인하는 검수원
    - 역할: 웹사이트 화면이 제대로 나오는지 확인함
@@ -326,9 +339,13 @@ Docker 실행 방식:
 | 서비스 | 포트 | 설명 | 상태 |
 |--------|------|------|------|
 | Frontend | 5173 | Vue.js 웹 애플리케이션 | ✅ 구현됨 |
-| Backend | 3001 | Node.js API 서버 | ✅ 구현됨 |
-| Python MCP | 내부 | MCP 통합 서버 | ✅ 구현됨 |
+| Backend | 3001 | Node.js API 서버 (MCP 서버 통합) | ✅ 구현됨 |
+| Python MCP | 내부 | 모든 Python MCP 서버 포함 | ✅ 구현됨 |
 | Python HTTP | 3002 | 화면 검증 서버 | ✅ 구현됨 |
+
+**MCP 서버 통합 상태:**
+- ✅ Backend: `mcp-server.js` 포함 (뉴스 검색 등)
+- ✅ Python MCP: 모든 Python MCP 서버 포함 (에러 로그, SQL 쿼리, 영향도 분석 등)
 
 ---
 
@@ -1612,13 +1629,15 @@ wsl --status
 1. Node.js 20 Alpine 이미지 사용 (경량)
 2. `package.json` 복사 및 프로덕션 의존성만 설치
 3. 소스 코드 복사 (`api-server.js`, `database.js`, `swagger.json`)
-4. 데이터 디렉토리 생성
-5. 포트 3001 노출
-6. 헬스체크 설정 (`/api-docs` 엔드포인트 확인)
+4. ✅ MCP 서버 파일 복사 (`mcp-server.js`) - API 서버에서 import하여 사용
+5. 데이터 디렉토리 생성
+6. 포트 3001 노출
+7. 헬스체크 설정 (`/api-docs` 엔드포인트 확인)
 
 **특징:**
 - Alpine Linux 사용으로 이미지 크기 최소화
 - 프로덕션 의존성만 설치 (`--only=production`)
+- ✅ MCP 서버 통합: 뉴스 검색 등 주요 기능을 MCP 서버를 통해 제공
 
 ### 3. Python Dockerfile
 
@@ -1630,12 +1649,19 @@ wsl --status
 2. 시스템 패키지 설치 (wget, gnupg)
 3. `requirements.txt` 복사 및 Python 패키지 설치
 4. Playwright 브라우저 설치 (Chromium)
-5. 소스 코드 복사
+5. ✅ 모든 Python MCP 서버 파일 복사:
+   - `mcp-unified-server.py` (도서 추천, 계산기)
+   - `mcp-error-log-analyzer.py` (에러 로그 분석)
+   - `mcp-sql-query-analyzer.py` (SQL 쿼리 분석)
+   - `mcp-impact-analyzer.py` (영향도 분석)
+   - `mcp-screen-validator-http-server.py` (화면 검증)
+   - `mcp-book-server.py`, `mcp-add-server.py` (기타 서버)
 6. 포트 3002 노출
 
 **특징:**
 - Playwright 브라우저 포함 (화면 검증 기능용)
 - Slim 이미지 사용으로 크기 최적화
+- ✅ 모든 Python MCP 서버 포함: 에러 로그, SQL 쿼리, 영향도 분석 등
 
 ### 4. Docker Compose 설정
 

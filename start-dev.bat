@@ -87,20 +87,20 @@ echo   - Each server output is color-coded
 echo   - Press Ctrl+C to stop all servers at once
 echo.
 
-REM Use concurrently to run only servers that are not already running
+REM Use npx concurrently to run only servers that are not already running
 if %API_RUNNING%==1 (
     if %PYTHON_RUNNING%==1 (
         if %VITE_RUNNING%==1 (
             echo Starting API Server, Python HTTP Server, and Vite dev server...
-            call concurrently "npm run api-server" "npm run screen-validator-server" "npm run dev"
+            call npx concurrently "npm run api-server" "npm run screen-validator-server" "npm run dev"
         ) else (
             echo Starting API Server and Python HTTP Server...
-            call concurrently "npm run api-server" "npm run screen-validator-server"
+            call npx concurrently "npm run api-server" "npm run screen-validator-server"
         )
     ) else (
         if %VITE_RUNNING%==1 (
             echo Starting API Server and Vite dev server...
-            call concurrently "npm run api-server" "npm run dev"
+            call npx concurrently "npm run api-server" "npm run dev"
         ) else (
             echo Starting API Server only...
             call npm run api-server
@@ -110,7 +110,7 @@ if %API_RUNNING%==1 (
     if %PYTHON_RUNNING%==1 (
         if %VITE_RUNNING%==1 (
             echo Starting Python HTTP Server and Vite dev server...
-            call concurrently "npm run screen-validator-server" "npm run dev"
+            call npx concurrently "npm run screen-validator-server" "npm run dev"
         ) else (
             echo Starting Python HTTP Server only...
             call npm run screen-validator-server

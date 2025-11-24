@@ -53,6 +53,19 @@
         "dom_get_element",
         "css_get_computed_styles"
       ]
+    },
+    "voc-server": {
+      "command": "python",
+      "args": ["C:/test/test02/mcp-voc-server.py"],
+      "cwd": "C:/test/test02",
+      "description": "VOC 자동 대응 MCP 서버 - SR 입력, Confluence 연동, Git 기반 유사 SR 검색, DB 변경 분석",
+      "tools": [
+        "register_sr",
+        "search_sr_history",
+        "search_similar_sr",
+        "analyze_db_changes",
+        "get_confluence_page"
+      ]
     }
   }
 }

@@ -18,9 +18,14 @@ RUN pip install --no-cache-dir -r requirements.txt
 RUN playwright install chromium
 RUN playwright install-deps chromium
 
-# 소스 코드 복사
+# MCP 서버 파일 복사 (모든 Python MCP 서버 포함)
 COPY mcp-unified-server.py ./
 COPY mcp-screen-validator-http-server.py ./
+COPY mcp-error-log-analyzer.py ./
+COPY mcp-sql-query-analyzer.py ./
+COPY mcp-impact-analyzer.py ./
+COPY mcp-book-server.py ./
+COPY mcp-add-server.py ./
 
 # 포트 노출
 EXPOSE 3002

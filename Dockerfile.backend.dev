@@ -10,6 +10,11 @@ COPY package*.json ./
 # 모든 의존성 설치 (개발 의존성 포함)
 RUN npm install
 
+# 소스 코드 복사 (볼륨 마운트로 오버라이드되지만 기본 파일 포함)
+COPY api-server.js ./
+COPY database.js ./
+COPY mcp-server.js ./
+
 # 포트 노출
 EXPOSE 3001
 

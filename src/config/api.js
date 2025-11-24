@@ -10,9 +10,9 @@ const getApiBaseUrl = () => {
     return import.meta.env.VITE_API_BASE_URL
   }
   
-  // 개발 환경에서는 상대 경로 사용 (Vite 프록시 사용)
+  // 개발 환경에서는 API 서버 URL 직접 사용
   if (import.meta.env.DEV) {
-    return '' // 빈 문자열 = 같은 도메인 (프록시 사용)
+    return 'http://localhost:3001' // API 서버 포트
   }
   
   // 프로덕션 기본값

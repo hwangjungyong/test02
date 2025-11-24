@@ -33,6 +33,7 @@ services:
     volumes:
       - ./api-server.js:/app/api-server.js
       - ./database.js:/app/database.js
+      - ./mcp-server.js:/app/mcp-server.js
       - ./data:/app/data
       - ./swagger.json:/app/swagger.json
     environment:

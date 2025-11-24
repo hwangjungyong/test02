@@ -22,6 +22,9 @@
       <button @click="toggleEconomyNewsAlarm" class="btn btn-alarm" :class="{ active: isEconomyAlarmEnabled }">
         🔔 {{ isEconomyAlarmEnabled ? '경제뉴스 알람 ON' : '경제뉴스 알람받기' }}
       </button>
+      <button @click="showVocModal = true" class="btn btn-voc" style="background: linear-gradient(135deg, #4caf50 0%, #2e7d32 100%); color: white; border: none;">
+        🌿 VOC 자동 대응
+      </button>
     </div>
 
     <!-- 로그인 모달 -->
@@ -34,6 +37,12 @@
     <SignupModal 
       v-model="showSignupModal" 
       @success="handleAuthSuccess"
+    />
+
+    <!-- VOC 관리 모달 -->
+    <VocManagement 
+      :showVocModal="showVocModal"
+      @close="showVocModal = false"
     />
 
     <!-- 문서 라이브러리 모달 -->
@@ -162,6 +171,13 @@
               :class="{ active: userManagementTab === 'docker' }"
             >
               🐳 Docker 상태
+            </button>
+            <button 
+              @click="userManagementTab = 'error-logs'" 
+              class="tab-btn" 
+              :class="{ active: userManagementTab === 'error-logs' }"
+            >
+              🔍 AI에러로그현황
             </button>
             <button 
               @click="userManagementTab = 'delete'" 
@@ -793,6 +809,143 @@
             </div>
           </div>
 
+          <!-- AI에러로그현황 탭 -->
+          <div v-if="userManagementTab === 'error-logs'" class="tab-content" style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; font-size: 14px; line-height: 1.5;">
+            <h3 style="font-size: 18px; font-weight: 600; margin-top: 0; margin-bottom: 8px;">🔍 AI에러로그현황</h3>
+            <p style="margin-bottom: 20px; color: #666; font-size: 14px;">
+              저장된 에러 로그를 확인하고 분석할 수 있습니다.
+            </p>
+
+            <!-- 필터 영역 -->
+            <div style="margin-bottom: 20px; padding: 16px; background: #f5f5f5; border-radius: 8px;">
+              <h4 style="margin-top: 0; font-size: 16px; font-weight: 600;">필터</h4>
+              <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px;">
+                <div>
+                  <label style="display: block; margin-bottom: 4px; font-size: 13px; font-weight: 500; color: #666;">시스템 타입</label>
+                  <select v-model="errorLogFilters.system_type" @change="loadErrorLogs" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px; font-family: inherit;">
+                    <option value="">전체</option>
+                    <option value="gcp_json">GCP (JSON)</option>
+                    <option value="gcp_text">GCP (Text)</option>
+                    <option value="aws">AWS CloudWatch</option>
+                    <option value="azure">Azure Monitor</option>
+                    <option value="application">일반 애플리케이션</option>
+                  </select>
+                </div>
+                <div>
+                  <label style="display: block; margin-bottom: 4px; font-size: 13px; font-weight: 500; color: #666;">심각도</label>
+                  <select v-model="errorLogFilters.severity" @change="loadErrorLogs" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px; font-family: inherit;">
+                    <option value="">전체</option>
+                    <option value="CRITICAL">CRITICAL</option>
+                    <option value="ERROR">ERROR</option>
+                    <option value="WARNING">WARNING</option>
+                  </select>
+                </div>
+                <div>
+                  <label style="display: block; margin-bottom: 4px; font-size: 13px; font-weight: 500; color: #666;">에러 타입</label>
+                  <select v-model="errorLogFilters.error_type" @change="loadErrorLogs" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px; font-family: inherit;">
+                    <option value="">전체</option>
+                    <option value="database">Database</option>
+                    <option value="network">Network</option>
+                    <option value="authentication">Authentication</option>
+                    <option value="memory">Memory</option>
+                    <option value="file">File</option>
+                    <option value="syntax">Syntax</option>
+                  </select>
+                </div>
+                <div>
+                  <label style="display: block; margin-bottom: 4px; font-size: 13px; font-weight: 500; color: #666;">시작 날짜</label>
+                  <input v-model="errorLogFilters.start_date" @change="loadErrorLogs" type="date" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px; font-family: inherit;">
+                </div>
+                <div>
+                  <label style="display: block; margin-bottom: 4px; font-size: 13px; font-weight: 500; color: #666;">종료 날짜</label>
+                  <input v-model="errorLogFilters.end_date" @change="loadErrorLogs" type="date" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px; font-family: inherit;">
+                </div>
+              </div>
+              <div style="margin-top: 12px;">
+                <button @click="resetErrorLogFilters" class="btn" style="padding: 8px 16px; background: #666; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; font-family: inherit;">
+                  필터 초기화
+                </button>
+              </div>
+            </div>
+
+            <!-- 로딩 상태 -->
+            <div v-if="errorLogsLoading" class="loading">
+              <p>에러 로그를 불러오는 중...</p>
+            </div>
+
+            <!-- 에러 메시지 -->
+            <div v-else-if="errorLogsError" class="error-message">
+              {{ errorLogsError }}
+            </div>
+
+            <!-- 에러 로그 목록 -->
+            <div v-else-if="errorLogs && errorLogs.length > 0">
+              <div style="margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center;">
+                <h4 style="font-size: 16px; font-weight: 600; margin: 0;">에러 로그 목록 ({{ errorLogs.length }}건)</h4>
+                <button @click="loadErrorLogs" class="btn" style="padding: 8px 16px; background: #2196f3; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; font-family: inherit;">
+                  🔄 새로고침
+                </button>
+              </div>
+
+              <div style="overflow-x: auto;">
+                <table style="width: 100%; border-collapse: collapse; background: white; border-radius: 8px; overflow: hidden; font-size: 13px;">
+                  <thead>
+                    <tr style="background: #f5f5f5;">
+                      <th style="padding: 12px; text-align: left; border-bottom: 2px solid #ddd; font-size: 13px; font-weight: 600; font-family: inherit;">번호</th>
+                      <th style="padding: 12px; text-align: left; border-bottom: 2px solid #ddd; font-size: 13px; font-weight: 600; font-family: inherit;">발생일시</th>
+                      <th style="padding: 12px; text-align: left; border-bottom: 2px solid #ddd; font-size: 13px; font-weight: 600; font-family: inherit;">시스템</th>
+                      <th style="padding: 12px; text-align: left; border-bottom: 2px solid #ddd; font-size: 13px; font-weight: 600; font-family: inherit;">심각도</th>
+                      <th style="padding: 12px; text-align: left; border-bottom: 2px solid #ddd; font-size: 13px; font-weight: 600; font-family: inherit;">에러 타입</th>
+                      <th style="padding: 12px; text-align: left; border-bottom: 2px solid #ddd; font-size: 13px; font-weight: 600; font-family: inherit;">발생 위치</th>
+                      <th style="padding: 12px; text-align: left; border-bottom: 2px solid #ddd; font-size: 13px; font-weight: 600; font-family: inherit;">작업</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="(log, index) in errorLogs" :key="log.id" style="border-bottom: 1px solid #eee;">
+                      <td style="padding: 12px; font-size: 13px; font-family: inherit;">{{ index + 1 }}</td>
+                      <td style="padding: 12px; font-size: 13px; font-family: inherit;">{{ formatDateTime(log.timestamp || log.created_at) }}</td>
+                      <td style="padding: 12px; font-size: 13px; font-family: inherit;">
+                        <span style="padding: 4px 8px; border-radius: 4px; background: #e3f2fd; color: #1976d2; font-size: 12px; font-weight: 500; font-family: inherit;">
+                          {{ log.system_type || log.log_type || 'N/A' }}
+                        </span>
+                      </td>
+                      <td style="padding: 12px; font-size: 13px; font-family: inherit;">
+                        <span :style="{
+                          padding: '4px 8px',
+                          borderRadius: '4px',
+                          fontSize: '12px',
+                          fontWeight: '600',
+                          fontFamily: 'inherit',
+                          color: log.severity === 'CRITICAL' ? '#d32f2f' : log.severity === 'ERROR' ? '#f57c00' : '#fbc02d',
+                          background: log.severity === 'CRITICAL' ? '#ffebee' : log.severity === 'ERROR' ? '#fff3e0' : '#fffde7'
+                        }">
+                          {{ log.severity || 'N/A' }}
+                        </span>
+                      </td>
+                      <td style="padding: 12px; font-size: 13px; font-family: inherit;">{{ log.error_type || 'N/A' }}</td>
+                      <td style="padding: 12px; font-size: 13px; font-family: inherit;">
+                        <span v-if="log.file_path" style="font-family: 'Consolas', 'Monaco', 'Courier New', monospace; font-size: 12px;">
+                          {{ log.file_path }}{{ log.line_number ? ':' + log.line_number : '' }}
+                        </span>
+                        <span v-else style="font-family: inherit;">N/A</span>
+                      </td>
+                      <td style="padding: 12px; font-size: 13px; font-family: inherit;">
+                        <button @click="showErrorLogDetail(log)" class="btn" style="padding: 6px 12px; background: #2196f3; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: 500; font-family: inherit;">
+                          상세보기
+                        </button>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <!-- 빈 목록 -->
+            <div v-else style="padding: 40px; text-align: center; color: #666; font-size: 14px; font-family: inherit;">
+              <p style="margin: 0; font-size: 14px;">저장된 에러 로그가 없습니다.</p>
+            </div>
+          </div>
+
           <!-- 계정 삭제 탭 -->
           <div v-if="userManagementTab === 'delete'" class="tab-content">
             <div class="delete-warning">
@@ -817,6 +970,86 @@
                   {{ userAccountDeleting ? '삭제 중...' : '계정 삭제' }}
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 에러 로그 상세 보기 모달 -->
+    <div v-if="showErrorLogDetailModal" class="modal-overlay" @click="showErrorLogDetailModal = false">
+      <div class="modal-content error-log-detail-modal" @click.stop style="max-width: 1000px; max-height: 90vh; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; font-size: 14px; line-height: 1.5;">
+        <div class="modal-header">
+          <h2 style="font-size: 20px; font-weight: 600; margin: 0;">🔍 에러 로그 상세 정보</h2>
+          <button @click="showErrorLogDetailModal = false" class="btn-close">✕</button>
+        </div>
+        <div class="modal-body" style="overflow-y: auto; max-height: calc(90vh - 120px);">
+          <div v-if="selectedErrorLog">
+            <!-- 기본 정보 -->
+            <div style="margin-bottom: 24px;">
+              <h3 style="margin-top: 0; font-size: 16px; font-weight: 600;">기본 정보</h3>
+              <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px;">
+                <div>
+                  <strong style="font-size: 13px; font-weight: 600; color: #666; display: block; margin-bottom: 4px;">발생일시</strong>
+                  <div style="margin-top: 4px; font-size: 13px; font-family: inherit;">{{ formatDateTime(selectedErrorLog.timestamp || selectedErrorLog.created_at) }}</div>
+                </div>
+                <div>
+                  <strong style="font-size: 13px; font-weight: 600; color: #666; display: block; margin-bottom: 4px;">시스템 타입</strong>
+                  <div style="margin-top: 4px;">
+                    <span style="padding: 4px 8px; border-radius: 4px; background: #e3f2fd; color: #1976d2; font-size: 12px; font-weight: 500; font-family: inherit;">
+                      {{ selectedErrorLog.system_type || selectedErrorLog.log_type || 'N/A' }}
+                    </span>
+                  </div>
+                </div>
+                <div>
+                  <strong style="font-size: 13px; font-weight: 600; color: #666; display: block; margin-bottom: 4px;">심각도</strong>
+                  <div style="margin-top: 4px;">
+                    <span :style="{
+                      padding: '4px 8px',
+                      borderRadius: '4px',
+                      fontSize: '12px',
+                      fontWeight: '600',
+                      fontFamily: 'inherit',
+                      color: selectedErrorLog.severity === 'CRITICAL' ? '#d32f2f' : selectedErrorLog.severity === 'ERROR' ? '#f57c00' : '#fbc02d',
+                      background: selectedErrorLog.severity === 'CRITICAL' ? '#ffebee' : selectedErrorLog.severity === 'ERROR' ? '#fff3e0' : '#fffde7'
+                    }">
+                      {{ selectedErrorLog.severity || 'N/A' }}
+                    </span>
+                  </div>
+                </div>
+                <div>
+                  <strong style="font-size: 13px; font-weight: 600; color: #666; display: block; margin-bottom: 4px;">에러 타입</strong>
+                  <div style="margin-top: 4px; font-size: 13px; font-family: inherit;">{{ selectedErrorLog.error_type || 'N/A' }}</div>
+                </div>
+                <div>
+                  <strong style="font-size: 13px; font-weight: 600; color: #666; display: block; margin-bottom: 4px;">리소스 타입</strong>
+                  <div style="margin-top: 4px; font-size: 13px; font-family: inherit;">{{ selectedErrorLog.resource_type || 'N/A' }}</div>
+                </div>
+                <div>
+                  <strong style="font-size: 13px; font-weight: 600; color: #666; display: block; margin-bottom: 4px;">서비스 이름</strong>
+                  <div style="margin-top: 4px; font-size: 13px; font-family: inherit;">{{ selectedErrorLog.service_name || 'N/A' }}</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 위치 정보 -->
+            <div v-if="selectedErrorLog.file_path" style="margin-bottom: 24px;">
+              <h3 style="margin-top: 0; font-size: 16px; font-weight: 600;">발생 위치</h3>
+              <div style="padding: 12px; background: #f5f5f5; border-radius: 4px; font-family: 'Consolas', 'Monaco', 'Courier New', monospace; font-size: 13px;">
+                {{ selectedErrorLog.file_path }}{{ selectedErrorLog.line_number ? ':' + selectedErrorLog.line_number : '' }}
+              </div>
+            </div>
+
+            <!-- 메타데이터 -->
+            <div v-if="selectedErrorLog.parsed_data" style="margin-bottom: 24px;">
+              <h3 style="margin-top: 0; font-size: 16px; font-weight: 600;">메타데이터</h3>
+              <pre style="padding: 12px; background: #f5f5f5; border-radius: 4px; overflow-x: auto; font-size: 12px; max-height: 300px; font-family: 'Consolas', 'Monaco', 'Courier New', monospace; line-height: 1.4;">{{ JSON.stringify(selectedErrorLog.parsed_data, null, 2) }}</pre>
+            </div>
+
+            <!-- 원본 로그 -->
+            <div style="margin-bottom: 24px;">
+              <h3 style="margin-top: 0; font-size: 16px; font-weight: 600;">원본 로그</h3>
+              <pre style="padding: 12px; background: #f5f5f5; border-radius: 4px; overflow-x: auto; font-size: 12px; max-height: 300px; white-space: pre-wrap; font-family: 'Consolas', 'Monaco', 'Courier New', monospace; line-height: 1.4;">{{ selectedErrorLog.log_content }}</pre>
             </div>
           </div>
         </div>
@@ -1004,19 +1237,56 @@
           </div>
         </div>
 
-        <!-- SQL 쿼리 분석 섹션 -->
+        <!-- AI 데이터 분석 섹션 -->
         <div class="sql-query-analysis-section">
           <div class="section-header">
-            <h2>📊 SQL 쿼리 분석</h2>
-            <p class="section-description">PostgreSQL 쿼리 구조, 성능, 최적화, 복잡도, 보안 분석</p>
+            <h2>📊 AI 데이터 분석</h2>
+            <p class="section-description">SQL 쿼리 분석 및 테이블 영향도 분석</p>
           </div>
           <div class="feature-buttons">
             <div class="button-group-card">
               <button @click="toggleSQLQueryAnalysis" class="btn btn-sql-analysis" :class="{ active: showSQLQueryAnalysis }">
                 <div class="button-icon">📊</div>
                 <div class="button-content">
-                  <div class="button-title">SQL 쿼리 분석</div>
+                  <div class="button-title">AI 데이터 분석</div>
                   <div class="button-subtitle">쿼리 구조, 성능, 보안 분석 및 최적화 제안</div>
+                </div>
+              </button>
+            </div>
+            <div class="button-group-card">
+              <button @click="toggleImpactAnalysis" class="btn btn-impact-analysis" :class="{ active: showImpactAnalysis }">
+                <div class="button-icon">🔍</div>
+                <div class="button-content">
+                  <div class="button-title">AI 테이블 영향도 분석</div>
+                  <div class="button-subtitle">테이블/컬럼 변경 시 프로그램, 화면, 배치 영향도 분석</div>
+                </div>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- AI 에러로그분석 섹션 -->
+        <div class="error-log-analysis-section">
+          <div class="section-header">
+            <h2>🔧 AI 에러로그분석</h2>
+            <p class="section-description">에러 로그 파일을 분석하여 원인 파악 및 해결 방안 제시</p>
+          </div>
+          <div class="feature-buttons">
+            <div class="button-group-card">
+              <button @click="toggleErrorLogAnalysis" class="btn btn-error-log-analysis" :class="{ active: showErrorLogAnalysis }">
+                <div class="button-icon">🔧</div>
+                <div class="button-content">
+                  <div class="button-title">AI 에러로그분석</div>
+                  <div class="button-subtitle">에러 로그 분석 및 조치 방법 제안</div>
+                </div>
+              </button>
+            </div>
+            <div class="button-group-card">
+              <button @click="openErrorLogStatusModal" class="btn btn-error-log-status" :class="{ active: showErrorLogStatusModal }">
+                <div class="button-icon">📋</div>
+                <div class="button-content">
+                  <div class="button-title">AI 에러 로그 현황</div>
+                  <div class="button-subtitle">저장된 에러 로그 최신순 조회</div>
                 </div>
               </button>
             </div>
@@ -1985,9 +2255,9 @@
           </div>
         </div>
 
-        <!-- SQL 쿼리 분석 결과 영역 -->
+        <!-- AI 데이터 분석 결과 영역 -->
         <div v-if="showSQLQueryAnalysis" class="sql-query-analysis-container">
-          <h2>📊 SQL 쿼리 분석</h2>
+          <h2>📊 AI 데이터 분석</h2>
           <div class="sql-analysis-notice">
             <p>ℹ️ PostgreSQL 쿼리를 분석하여 구조, 성능, 복잡도, 보안을 평가하고 최적화 제안을 제공합니다.</p>
           </div>
@@ -2487,6 +2757,634 @@
             </div>
           </div>
         </div>
+
+        <!-- AI 에러로그분석 결과 영역 -->
+        <div v-if="showErrorLogAnalysis" class="error-log-analysis-container">
+          <h2>🔧 AI 에러로그분석</h2>
+          <div class="error-log-analysis-notice">
+            <p>ℹ️ GCP 에러 로그를 직접 입력하거나 파일 경로를 지정하여 분석합니다.</p>
+            <p>💡 에러 로그를 자동으로 적재하고 최신순으로 테이블 형태로 출력하며, 워크스페이스에서 발생 위치를 찾아 수정 가이드를 제공합니다.</p>
+          </div>
+          
+          <!-- 로그 입력 방식 선택 -->
+          <div class="input-group">
+            <label>로그 입력 방식:</label>
+            <div class="input-mode-selector">
+              <label class="radio-label">
+                <input type="radio" v-model="errorLogInputMode" value="direct" />
+                직접 입력
+              </label>
+              <label class="radio-label">
+                <input type="radio" v-model="errorLogInputMode" value="file" />
+                파일 경로
+              </label>
+            </div>
+          </div>
+          
+          <!-- 직접 입력 모드 -->
+          <div v-if="errorLogInputMode === 'direct'" class="input-group">
+            <label for="errorLogContent">GCP 에러 로그 내용:</label>
+            <textarea
+              id="errorLogContent"
+              v-model="errorLogContent"
+              placeholder="GCP 에러 로그를 여기에 붙여넣으세요..."
+              class="input-field"
+              rows="15"
+            ></textarea>
+          </div>
+          
+          <!-- 파일 경로 모드 -->
+          <div v-if="errorLogInputMode === 'file'" class="input-group">
+            <label for="errorLogFile">로그 파일 경로 (선택사항):</label>
+            <input
+              id="errorLogFile"
+              v-model="errorLogFile"
+              type="text"
+              placeholder="예: logs/error.log (비워두면 워크스페이스에서 자동으로 찾습니다)"
+              class="input-field"
+            />
+          </div>
+          
+          <div class="error-log-analysis-actions">
+            <button @click="analyzeErrorLog" class="btn-analyze-error-log" :disabled="isAnalyzingErrorLog || (errorLogInputMode === 'direct' && !errorLogContent.trim())">
+              <span class="btn-icon" v-if="!isAnalyzingErrorLog">🔍</span>
+              <span class="loading-spinner" v-if="isAnalyzingErrorLog"></span>
+              <span class="btn-text">
+                <span v-if="!isAnalyzingErrorLog">에러 로그 분석하기</span>
+                <span v-else>분석 중...</span>
+              </span>
+            </button>
+            <button @click="saveErrorLog" class="btn-save-error-log" :disabled="isAnalyzingErrorLog || (errorLogInputMode === 'direct' && !errorLogContent.trim())">
+              <span class="btn-icon">💾</span>
+              <span class="btn-text">저장</span>
+            </button>
+            <button @click="loadErrorLogHistory" class="btn-load-history">
+              <span class="btn-icon">📜</span>
+              <span class="btn-text">이력 조회</span>
+            </button>
+            <button @click="clearErrorLogAnalysis" class="btn-clear-error-log">
+              <span class="btn-icon">🗑️</span>
+              <span class="btn-text">초기화</span>
+            </button>
+          </div>
+          
+          <!-- 로그 이력 모달 -->
+          <div v-if="showErrorLogHistory" class="error-log-history-modal">
+            <div class="modal-content">
+              <div class="modal-header">
+                <h3>📜 에러 로그 이력</h3>
+                <button @click="showErrorLogHistory = false" class="modal-close">×</button>
+              </div>
+              <div class="modal-body">
+                <div v-if="errorLogHistory.length === 0" class="empty-history">
+                  저장된 로그가 없습니다.
+                </div>
+                <div v-else class="history-list">
+                  <div v-for="log in errorLogHistory" :key="log.id" class="history-item">
+                    <div class="history-header">
+                      <span class="history-date">{{ new Date(log.created_at).toLocaleString('ko-KR') }}</span>
+                      <span class="history-type">{{ log.log_type || 'N/A' }}</span>
+                      <button @click="loadLogFromHistory(log)" class="btn-load-log">불러오기</button>
+                      <button @click="deleteErrorLog(log.id)" class="btn-delete-log">삭제</button>
+                    </div>
+                    <div class="history-content">{{ log.log_content.substring(0, 200) }}{{ log.log_content.length > 200 ? '...' : '' }}</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          <div v-if="errorLogAnalysisError" class="error">
+            <p>{{ errorLogAnalysisError }}</p>
+          </div>
+          
+          <div v-if="errorLogAnalysisResult" class="error-log-analysis-results">
+            <h3>📊 에러 로그 분석 결과 (최신순)</h3>
+            <div class="error-log-content" v-html="errorLogAnalysisResult"></div>
+          </div>
+        </div>
+
+        <!-- AI 에러 로그 현황 모달 -->
+        <div v-if="showErrorLogStatusModal" class="modal-overlay" @click="closeErrorLogStatusModal" style="z-index: 2000;">
+          <div class="modal-content error-log-status-modal" @click.stop style="max-width: 1200px; max-height: 90vh; z-index: 2001; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; font-size: 14px; line-height: 1.5;">
+            <div class="modal-header">
+              <h2 style="font-size: 20px; font-weight: 600; margin: 0;">📋 AI 에러 로그 현황</h2>
+              <button @click="closeErrorLogStatusModal" class="btn-close">✕</button>
+            </div>
+            <div class="modal-body" style="overflow-y: auto; max-height: calc(90vh - 120px);">
+              <!-- 로딩 상태 -->
+              <div v-if="errorLogStatusLoading" class="loading">
+                <p>에러 로그를 불러오는 중...</p>
+              </div>
+
+              <!-- 에러 메시지 -->
+              <div v-else-if="errorLogStatusError" class="error-message">
+                {{ errorLogStatusError }}
+              </div>
+
+              <!-- 에러 로그 목록 -->
+              <div v-else-if="errorLogStatusList && errorLogStatusList.length > 0">
+                <div style="margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center;">
+                  <h4 style="font-size: 16px; font-weight: 600; margin: 0;">에러 로그 목록 ({{ errorLogStatusList.length }}건) - 최신순</h4>
+                  <button @click="loadErrorLogStatus" class="btn" style="padding: 8px 16px; background: #2196f3; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; font-family: inherit;">
+                    🔄 새로고침
+                  </button>
+                </div>
+
+                <div style="overflow-x: auto;">
+                  <table style="width: 100%; border-collapse: collapse; background: white; border-radius: 8px; overflow: hidden; font-size: 13px;">
+                    <thead>
+                      <tr style="background: #f5f5f5;">
+                        <th style="padding: 12px; text-align: left; border-bottom: 2px solid #ddd; font-size: 13px; font-weight: 600; font-family: inherit;">번호</th>
+                        <th style="padding: 12px; text-align: left; border-bottom: 2px solid #ddd; font-size: 13px; font-weight: 600; font-family: inherit;">발생일시</th>
+                        <th style="padding: 12px; text-align: left; border-bottom: 2px solid #ddd; font-size: 13px; font-weight: 600; font-family: inherit;">시스템</th>
+                        <th style="padding: 12px; text-align: left; border-bottom: 2px solid #ddd; font-size: 13px; font-weight: 600; font-family: inherit;">심각도</th>
+                        <th style="padding: 12px; text-align: left; border-bottom: 2px solid #ddd; font-size: 13px; font-weight: 600; font-family: inherit;">에러 타입</th>
+                        <th style="padding: 12px; text-align: left; border-bottom: 2px solid #ddd; font-size: 13px; font-weight: 600; font-family: inherit;">발생 위치</th>
+                        <th style="padding: 12px; text-align: left; border-bottom: 2px solid #ddd; font-size: 13px; font-weight: 600; font-family: inherit;">작업</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr v-for="(log, index) in errorLogStatusList" :key="log.id" style="border-bottom: 1px solid #eee;">
+                        <td style="padding: 12px; font-size: 13px; font-family: inherit;">{{ index + 1 }}</td>
+                        <td style="padding: 12px; font-size: 13px; font-family: inherit;">{{ formatDateTime(log.timestamp || log.created_at) }}</td>
+                        <td style="padding: 12px; font-size: 13px; font-family: inherit;">
+                          <span style="padding: 4px 8px; border-radius: 4px; background: #e3f2fd; color: #1976d2; font-size: 12px; font-weight: 500; font-family: inherit;">
+                            {{ log.system_type || log.log_type || 'N/A' }}
+                          </span>
+                        </td>
+                        <td style="padding: 12px; font-size: 13px; font-family: inherit;">
+                          <span :style="{
+                            padding: '4px 8px',
+                            borderRadius: '4px',
+                            fontSize: '12px',
+                            fontWeight: '600',
+                            fontFamily: 'inherit',
+                            color: log.severity === 'CRITICAL' ? '#d32f2f' : log.severity === 'ERROR' ? '#f57c00' : '#fbc02d',
+                            background: log.severity === 'CRITICAL' ? '#ffebee' : log.severity === 'ERROR' ? '#fff3e0' : '#fffde7'
+                          }">
+                            {{ log.severity || 'N/A' }}
+                          </span>
+                        </td>
+                        <td style="padding: 12px; font-size: 13px; font-family: inherit;">{{ log.error_type || 'N/A' }}</td>
+                        <td style="padding: 12px; font-size: 13px; font-family: inherit;">
+                          <span v-if="log.file_path" style="font-family: 'Consolas', 'Monaco', 'Courier New', monospace; font-size: 12px;">
+                            {{ log.file_path }}{{ log.line_number ? ':' + log.line_number : '' }}
+                          </span>
+                          <span v-else style="font-family: inherit;">N/A</span>
+                        </td>
+                        <td style="padding: 12px; font-size: 13px; font-family: inherit;">
+                          <button @click="showErrorLogStatusDetail(log)" class="btn" style="padding: 6px 12px; background: #2196f3; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: 500; font-family: inherit;">
+                            상세보기
+                          </button>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <!-- 빈 목록 -->
+              <div v-else style="padding: 40px; text-align: center; color: #666; font-size: 14px; font-family: inherit;">
+                <p style="margin: 0; font-size: 14px;">저장된 에러 로그가 없습니다.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- AI 에러 로그 현황 상세 보기 모달 -->
+        <div v-if="showErrorLogStatusDetailModal" class="modal-overlay" @click="closeErrorLogStatusDetail" style="z-index: 2002;">
+          <div class="modal-content error-log-detail-modal" @click.stop style="max-width: 1000px; max-height: 90vh; z-index: 2003; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; font-size: 14px; line-height: 1.5;">
+            <div class="modal-header">
+              <h2 style="font-size: 20px; font-weight: 600; margin: 0;">🔍 에러 로그 상세 정보</h2>
+              <button @click="closeErrorLogStatusDetail" class="btn-close">✕</button>
+            </div>
+            <div class="modal-body" style="overflow-y: auto; max-height: calc(90vh - 120px);">
+              <div v-if="selectedErrorLogStatus">
+                <!-- 기본 정보 -->
+                <div style="margin-bottom: 24px;">
+                  <h3 style="margin-top: 0; font-size: 16px; font-weight: 600;">기본 정보</h3>
+                  <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px;">
+                    <div>
+                      <strong style="font-size: 13px; font-weight: 600; color: #666; display: block; margin-bottom: 4px;">발생일시</strong>
+                      <div style="margin-top: 4px; font-size: 13px; font-family: inherit;">{{ formatDateTime(selectedErrorLogStatus.timestamp || selectedErrorLogStatus.created_at) }}</div>
+                    </div>
+                    <div>
+                      <strong style="font-size: 13px; font-weight: 600; color: #666; display: block; margin-bottom: 4px;">시스템 타입</strong>
+                      <div style="margin-top: 4px;">
+                        <span style="padding: 4px 8px; border-radius: 4px; background: #e3f2fd; color: #1976d2; font-size: 12px; font-weight: 500; font-family: inherit;">
+                          {{ selectedErrorLogStatus.system_type || selectedErrorLogStatus.log_type || 'N/A' }}
+                        </span>
+                      </div>
+                    </div>
+                    <div>
+                      <strong style="font-size: 13px; font-weight: 600; color: #666; display: block; margin-bottom: 4px;">심각도</strong>
+                      <div style="margin-top: 4px;">
+                        <span :style="{
+                          padding: '4px 8px',
+                          borderRadius: '4px',
+                          fontSize: '12px',
+                          fontWeight: '600',
+                          fontFamily: 'inherit',
+                          color: selectedErrorLogStatus.severity === 'CRITICAL' ? '#d32f2f' : selectedErrorLogStatus.severity === 'ERROR' ? '#f57c00' : '#fbc02d',
+                          background: selectedErrorLogStatus.severity === 'CRITICAL' ? '#ffebee' : selectedErrorLogStatus.severity === 'ERROR' ? '#fff3e0' : '#fffde7'
+                        }">
+                          {{ selectedErrorLogStatus.severity || 'N/A' }}
+                        </span>
+                      </div>
+                    </div>
+                    <div>
+                      <strong style="font-size: 13px; font-weight: 600; color: #666; display: block; margin-bottom: 4px;">에러 타입</strong>
+                      <div style="margin-top: 4px; font-size: 13px; font-family: inherit;">{{ selectedErrorLogStatus.error_type || 'N/A' }}</div>
+                    </div>
+                    <div>
+                      <strong style="font-size: 13px; font-weight: 600; color: #666; display: block; margin-bottom: 4px;">리소스 타입</strong>
+                      <div style="margin-top: 4px; font-size: 13px; font-family: inherit;">{{ selectedErrorLogStatus.resource_type || 'N/A' }}</div>
+                    </div>
+                    <div>
+                      <strong style="font-size: 13px; font-weight: 600; color: #666; display: block; margin-bottom: 4px;">서비스 이름</strong>
+                      <div style="margin-top: 4px; font-size: 13px; font-family: inherit;">{{ selectedErrorLogStatus.service_name || 'N/A' }}</div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- 위치 정보 -->
+                <div v-if="selectedErrorLogStatus.file_path" style="margin-bottom: 24px;">
+                  <h3 style="margin-top: 0; font-size: 16px; font-weight: 600;">발생 위치</h3>
+                  <div style="padding: 12px; background: #f5f5f5; border-radius: 4px; font-family: 'Consolas', 'Monaco', 'Courier New', monospace; font-size: 13px;">
+                    {{ selectedErrorLogStatus.file_path }}{{ selectedErrorLogStatus.line_number ? ':' + selectedErrorLogStatus.line_number : '' }}
+                  </div>
+                </div>
+
+                <!-- 원본 로그 (메타데이터 포함) -->
+                <div style="margin-bottom: 24px;">
+                  <h3 style="margin-top: 0; font-size: 16px; font-weight: 600;">원본 로그</h3>
+                  <pre style="padding: 12px; background: #f5f5f5; border-radius: 4px; overflow-x: auto; font-size: 12px; max-height: 300px; white-space: pre-wrap; font-family: 'Consolas', 'Monaco', 'Courier New', monospace; line-height: 1.4; color: #000;">{{ selectedErrorLogStatus.log_content }}</pre>
+                  <div v-if="selectedErrorLogStatus.parsed_data" style="margin-top: 12px;">
+                    <h4 style="margin-top: 12px; margin-bottom: 8px; font-size: 14px; font-weight: 600;">메타데이터</h4>
+                    <pre style="padding: 12px; background: #f5f5f5; border-radius: 4px; overflow-x: auto; font-size: 12px; max-height: 300px; font-family: 'Consolas', 'Monaco', 'Courier New', monospace; line-height: 1.4; color: #000;">{{ JSON.stringify(selectedErrorLogStatus.parsed_data, null, 2) }}</pre>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- AI 테이블 영향도 분석 결과 영역 -->
+        <div v-if="showImpactAnalysis" class="impact-analysis-container">
+          <h2>🔍 AI 테이블 영향도 분석</h2>
+          <div class="impact-analysis-notice">
+            <p>ℹ️ 테이블/컬럼 변경 시 워크스페이스 전체에 미치는 영향을 종합적으로 분석합니다.</p>
+            <p>💡 프로그램 코드, 화면, 배치 프로시저 등 모든 영향도를 분석합니다.</p>
+          </div>
+          
+          <div class="input-group">
+            <label for="impactTableName">테이블명:</label>
+            <input
+              id="impactTableName"
+              v-model="impactTableName"
+              type="text"
+              placeholder="예: users"
+              class="input-field"
+            />
+          </div>
+          
+          <div class="input-group">
+            <label for="impactColumnName">컬럼명 (선택사항):</label>
+            <input
+              id="impactColumnName"
+              v-model="impactColumnName"
+              type="text"
+              placeholder="예: user_id"
+              class="input-field"
+            />
+          </div>
+          
+          <div class="input-group">
+            <label for="impactSpecialNotes">특이사항:</label>
+            <textarea
+              id="impactSpecialNotes"
+              v-model="impactSpecialNotes"
+              placeholder="예: users 테이블의 user_id가 int에서 varchar로 변경되면 어떻게 되는지 영향도 분석을 해줘"
+              class="input-field"
+              rows="4"
+            ></textarea>
+          </div>
+          
+          <div class="impact-analysis-actions">
+            <button @click="analyzeImpactNew" class="btn-analyze-impact" :disabled="isAnalyzingImpactNew">
+              <span class="btn-icon" v-if="!isAnalyzingImpactNew">🔍</span>
+              <span class="loading-spinner" v-if="isAnalyzingImpactNew"></span>
+              <span class="btn-text">
+                <span v-if="!isAnalyzingImpactNew">영향도 분석하기</span>
+                <span v-else>분석 중...</span>
+              </span>
+            </button>
+            <button @click="clearImpactAnalysisNew" class="btn-clear-impact">
+              <span class="btn-icon">🗑️</span>
+              <span class="btn-text">초기화</span>
+            </button>
+          </div>
+          
+          <div v-if="impactAnalysisErrorNew" class="error">
+            <p>{{ impactAnalysisErrorNew }}</p>
+          </div>
+          
+          <div v-if="impactAnalysisResultNew" class="impact-analysis-results">
+            <h3>📊 영향도 분석 결과</h3>
+            
+            <!-- 간단한 요약 카드 -->
+            <div class="impact-summary-simple">
+              <div class="summary-main">
+                <div class="summary-target">
+                  <span class="target-label">분석 대상:</span>
+                  <span class="target-name">{{ impactAnalysisResultNew.table_name }}</span>
+                  <span v-if="impactAnalysisResultNew.column_name" class="target-column">.{{ impactAnalysisResultNew.column_name }}</span>
+                </div>
+              </div>
+              
+              <!-- 핵심 지표 한눈에 보기 -->
+              <div class="impact-overview">
+                <div class="overview-item">
+                  <div class="overview-number">{{ getTotalImpactCount() }}</div>
+                  <div class="overview-label">총 영향도</div>
+                </div>
+                <div class="overview-item">
+                  <div class="overview-number">{{ getAffectedFilesCount() }}</div>
+                  <div class="overview-label">영향 파일</div>
+                </div>
+                <div class="overview-item">
+                  <div class="overview-number">{{ getAffectedTablesCount() }}</div>
+                  <div class="overview-label">연관 테이블</div>
+                </div>
+              </div>
+            </div>
+            
+            <!-- 테이블 상관도 - 간단 버전 -->
+            <div v-if="impactAnalysisResultNew.table_correlation" class="impact-card-simple">
+              <div class="card-header-simple" @click="toggleSection('table_correlation')">
+                <div class="card-title-simple">
+                  <span class="card-icon-simple">📊</span>
+                  <div>
+                    <div class="card-title-main">테이블 상관도</div>
+                    <div class="card-title-sub">{{ impactAnalysisResultNew.table_correlation.summary || '분석 중...' }}</div>
+                  </div>
+                </div>
+                <button class="toggle-btn-simple">{{ expandedSections.table_correlation ? '▲' : '▼' }}</button>
+              </div>
+              <div v-if="expandedSections.table_correlation" class="card-content-simple">
+                <div class="simple-section">
+                  <div class="simple-label">직접 참조</div>
+                  <div class="simple-stat-badge">{{ impactAnalysisResultNew.table_correlation.direct_references || 0 }}건</div>
+                </div>
+                
+                <div v-if="impactAnalysisResultNew.table_correlation.join_relations && impactAnalysisResultNew.table_correlation.join_relations.length > 0" class="simple-section">
+                  <div class="simple-label">JOIN 관계 ({{ impactAnalysisResultNew.table_correlation.join_relations.length }}건)</div>
+                  <div class="detail-list">
+                    <div v-for="(rel, idx) in impactAnalysisResultNew.table_correlation.join_relations" :key="idx" class="detail-item-clean">
+                      <span class="detail-item-label">연관 테이블:</span>
+                      <span class="detail-item-value">{{ rel.related_table }}</span>
+                      <span class="detail-item-type">{{ rel.join_type }}</span>
+                      <div class="detail-item-file">{{ rel.source_file }}</div>
+                    </div>
+                  </div>
+                </div>
+                
+                <div v-if="impactAnalysisResultNew.table_correlation.related_tables && impactAnalysisResultNew.table_correlation.related_tables.length > 0" class="simple-section">
+                  <div class="simple-label">연관 테이블 목록</div>
+                  <div class="simple-tags">
+                    <span v-for="(table, idx) in impactAnalysisResultNew.table_correlation.related_tables" :key="idx" class="simple-tag">{{ table }}</span>
+                  </div>
+                </div>
+                
+                <div v-if="impactAnalysisResultNew.table_correlation.referenced_files && impactAnalysisResultNew.table_correlation.referenced_files.length > 0" class="simple-section">
+                  <div class="simple-label">참조 파일 ({{ impactAnalysisResultNew.table_correlation.referenced_files.length }}개)</div>
+                  <div class="simple-files">
+                    <div v-for="(file, idx) in impactAnalysisResultNew.table_correlation.referenced_files" :key="idx" class="simple-file">{{ file }}</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            <!-- 프로그램 테이블 상관도 - 간단 버전 -->
+            <div v-if="impactAnalysisResultNew.program_table_correlation" class="impact-card-simple">
+              <div class="card-header-simple" @click="toggleSection('program_table_correlation')">
+                <div class="card-title-simple">
+                  <span class="card-icon-simple">💻</span>
+                  <div>
+                    <div class="card-title-main">프로그램 코드</div>
+                    <div class="card-title-sub">{{ impactAnalysisResultNew.program_table_correlation.summary || '분석 중...' }}</div>
+                  </div>
+                </div>
+                <button class="toggle-btn-simple">{{ expandedSections.program_table_correlation ? '▲' : '▼' }}</button>
+              </div>
+              <div v-if="expandedSections.program_table_correlation" class="card-content-simple">
+                <div class="simple-stats">
+                  <div class="simple-stat">
+                    <span class="stat-number">{{ impactAnalysisResultNew.program_table_correlation.total_references || 0 }}</span>
+                    <span class="stat-label">총 참조</span>
+                  </div>
+                  <div class="simple-stat">
+                    <span class="stat-number">{{ impactAnalysisResultNew.program_table_correlation.javascript_files || 0 }}</span>
+                    <span class="stat-label">JS/TS</span>
+                  </div>
+                  <div class="simple-stat">
+                    <span class="stat-number">{{ impactAnalysisResultNew.program_table_correlation.python_files || 0 }}</span>
+                    <span class="stat-label">Python</span>
+                  </div>
+                  <div class="simple-stat">
+                    <span class="stat-number">{{ impactAnalysisResultNew.program_table_correlation.sql_files || 0 }}</span>
+                    <span class="stat-label">SQL</span>
+                  </div>
+                </div>
+                
+                <div v-if="impactAnalysisResultNew.program_table_correlation.references && impactAnalysisResultNew.program_table_correlation.references.length > 0" class="simple-section">
+                  <div class="simple-label">참조 위치 상세 ({{ impactAnalysisResultNew.program_table_correlation.references.length }}건)</div>
+                  <div class="detail-list">
+                    <div v-for="(ref, idx) in impactAnalysisResultNew.program_table_correlation.references" :key="idx" class="detail-item-clean">
+                      <div class="detail-item-header">
+                        <span class="detail-item-file">{{ ref.file }}</span>
+                        <span class="detail-item-line">라인 {{ ref.line }}</span>
+                      </div>
+                      <div v-if="ref.context" class="detail-item-context">{{ ref.context }}</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            <!-- 프로그램 컬럼 상관도 - 간단 버전 -->
+            <div v-if="impactAnalysisResultNew.program_column_correlation && Object.keys(impactAnalysisResultNew.program_column_correlation).length > 0" class="impact-card-simple">
+              <div class="card-header-simple" @click="toggleSection('program_column_correlation')">
+                <div class="card-title-simple">
+                  <span class="card-icon-simple">🔧</span>
+                  <div>
+                    <div class="card-title-main">컬럼 사용</div>
+                    <div class="card-title-sub">{{ impactAnalysisResultNew.program_column_correlation.summary || '분석 중...' }}</div>
+                  </div>
+                </div>
+                <button class="toggle-btn-simple">{{ expandedSections.program_column_correlation ? '▲' : '▼' }}</button>
+              </div>
+              <div v-if="expandedSections.program_column_correlation" class="card-content-simple">
+                <div class="simple-stats">
+                  <div class="simple-stat">
+                    <span class="stat-number">{{ impactAnalysisResultNew.program_column_correlation.total_references || 0 }}</span>
+                    <span class="stat-label">총 참조</span>
+                  </div>
+                  <div class="simple-stat">
+                    <span class="stat-number">{{ impactAnalysisResultNew.program_column_correlation.javascript_files || 0 }}</span>
+                    <span class="stat-label">JS/TS</span>
+                  </div>
+                  <div class="simple-stat">
+                    <span class="stat-number">{{ impactAnalysisResultNew.program_column_correlation.python_files || 0 }}</span>
+                    <span class="stat-label">Python</span>
+                  </div>
+                  <div class="simple-stat">
+                    <span class="stat-number">{{ impactAnalysisResultNew.program_column_correlation.sql_files || 0 }}</span>
+                    <span class="stat-label">SQL</span>
+                  </div>
+                </div>
+                
+                <div v-if="impactAnalysisResultNew.program_column_correlation.references && impactAnalysisResultNew.program_column_correlation.references.length > 0" class="simple-section">
+                  <div class="simple-label">참조 위치 상세 ({{ impactAnalysisResultNew.program_column_correlation.references.length }}건)</div>
+                  <div class="detail-list">
+                    <div v-for="(ref, idx) in impactAnalysisResultNew.program_column_correlation.references" :key="idx" class="detail-item-clean">
+                      <div class="detail-item-header">
+                        <span class="detail-item-file">{{ ref.file }}</span>
+                        <span class="detail-item-line">라인 {{ ref.line }}</span>
+                      </div>
+                      <div v-if="ref.context" class="detail-item-context">{{ ref.context }}</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            <!-- 화면 영향 분석 - 간단 버전 -->
+            <div v-if="impactAnalysisResultNew.ui_impact" class="impact-card-simple">
+              <div class="card-header-simple" @click="toggleSection('ui_impact')">
+                <div class="card-title-simple">
+                  <span class="card-icon-simple">🖥️</span>
+                  <div>
+                    <div class="card-title-main">화면 영향</div>
+                    <div class="card-title-sub">{{ impactAnalysisResultNew.ui_impact.summary || '분석 중...' }}</div>
+                  </div>
+                </div>
+                <button class="toggle-btn-simple">{{ expandedSections.ui_impact ? '▲' : '▼' }}</button>
+              </div>
+              <div v-if="expandedSections.ui_impact" class="card-content-simple">
+                <div class="simple-section">
+                  <div class="simple-label">영향받는 Vue 컴포넌트</div>
+                  <div class="simple-stat-badge">{{ impactAnalysisResultNew.ui_impact.affected_vue_files || 0 }}개</div>
+                </div>
+                
+                <div v-if="impactAnalysisResultNew.ui_impact.impacts && impactAnalysisResultNew.ui_impact.impacts.length > 0" class="simple-section">
+                  <div class="simple-label">영향 상세 ({{ impactAnalysisResultNew.ui_impact.impacts.length }}건)</div>
+                  <div class="detail-list">
+                    <div v-for="(impact, idx) in impactAnalysisResultNew.ui_impact.impacts" :key="idx" class="detail-item-clean">
+                      <div class="detail-item-header">
+                        <span class="detail-item-file">{{ impact.file }}</span>
+                        <span class="detail-item-type-badge" :class="impact.type === 'table_reference' ? 'type-table' : 'type-column'">
+                          {{ impact.type === 'table_reference' ? '테이블 참조' : '컬럼 참조' }}
+                        </span>
+                      </div>
+                      <div v-if="impact.table" class="detail-item-info">테이블: {{ impact.table }}</div>
+                      <div v-if="impact.column" class="detail-item-info">컬럼: {{ impact.column }}</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            <!-- 배치 프로시저 영향 - 간단 버전 -->
+            <div v-if="impactAnalysisResultNew.batch_procedure_impact" class="impact-card-simple">
+              <div class="card-header-simple" @click="toggleSection('batch_procedure_impact')">
+                <div class="card-title-simple">
+                  <span class="card-icon-simple">⚙️</span>
+                  <div>
+                    <div class="card-title-main">배치/프로시저</div>
+                    <div class="card-title-sub">{{ impactAnalysisResultNew.batch_procedure_impact.summary || '분석 중...' }}</div>
+                  </div>
+                </div>
+                <button class="toggle-btn-simple">{{ expandedSections.batch_procedure_impact ? '▲' : '▼' }}</button>
+              </div>
+              <div v-if="expandedSections.batch_procedure_impact" class="card-content-simple">
+                <div class="simple-section">
+                  <div class="simple-label">영향받는 프로시저/함수</div>
+                  <div class="simple-stat-badge">{{ impactAnalysisResultNew.batch_procedure_impact.affected_procedures || 0 }}건</div>
+                  <div v-if="impactAnalysisResultNew.batch_procedure_impact.unique_procedures" class="simple-stat-badge-secondary">
+                    고유 프로시저: {{ impactAnalysisResultNew.batch_procedure_impact.unique_procedures }}개
+                  </div>
+                </div>
+                
+                <div v-if="impactAnalysisResultNew.batch_procedure_impact.impacts && impactAnalysisResultNew.batch_procedure_impact.impacts.length > 0" class="simple-section">
+                  <div class="simple-label">프로시저 상세 ({{ impactAnalysisResultNew.batch_procedure_impact.impacts.length }}건)</div>
+                  <div class="detail-list">
+                    <div v-for="(impact, idx) in impactAnalysisResultNew.batch_procedure_impact.impacts" :key="idx" class="detail-item-clean">
+                      <div class="detail-item-header">
+                        <span class="detail-item-value procedure-name">{{ impact.procedure_name }}</span>
+                        <span class="detail-item-type-badge" :class="impact.impact_type === 'table_reference' ? 'type-table' : 'type-column'">
+                          {{ impact.impact_type === 'table_reference' ? '테이블 참조' : '컬럼 참조' }}
+                        </span>
+                      </div>
+                      <div class="detail-item-file">{{ impact.file }}</div>
+                      <div v-if="impact.table" class="detail-item-info">테이블: {{ impact.table }}</div>
+                      <div v-if="impact.column" class="detail-item-info">컬럼: {{ impact.column }}</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            <!-- PostgreSQL 리니지 -->
+            <div v-if="impactAnalysisResultNew.postgresql_lineage" class="impact-card-simple">
+              <div class="card-header-simple" @click="toggleSection('postgresql_lineage')">
+                <div class="card-title-simple">
+                  <span class="card-icon-simple">🔗</span>
+                  <div>
+                    <div class="card-title-main">PostgreSQL 리니지</div>
+                    <div class="card-title-sub">{{ impactAnalysisResultNew.postgresql_lineage.summary || '분석 중...' }}</div>
+                  </div>
+                </div>
+                <button class="toggle-btn-simple">{{ expandedSections.postgresql_lineage ? '▲' : '▼' }}</button>
+              </div>
+              <div v-if="expandedSections.postgresql_lineage" class="card-content-simple">
+                <div class="simple-section">
+                  <div class="simple-label">스키마 정보</div>
+                  <div class="detail-item-clean">
+                    <span class="detail-item-label">스키마:</span>
+                    <span class="detail-item-value">{{ impactAnalysisResultNew.postgresql_lineage.postgresql_schema || 'public' }}</span>
+                  </div>
+                </div>
+                
+                <div v-if="impactAnalysisResultNew.postgresql_lineage.columns && impactAnalysisResultNew.postgresql_lineage.columns.length > 0" class="simple-section">
+                  <div class="simple-label">컬럼 정보 ({{ impactAnalysisResultNew.postgresql_lineage.columns.length }}개)</div>
+                  <div class="detail-list">
+                    <div v-for="(col, idx) in impactAnalysisResultNew.postgresql_lineage.columns" :key="idx" class="detail-item-clean">
+                      <div class="detail-item-header">
+                        <span class="detail-item-value">{{ col.name }}</span>
+                        <span class="detail-item-type">{{ col.type }}</span>
+                        <span class="detail-item-nullable" :class="col.nullable ? 'nullable-yes' : 'nullable-no'">
+                          {{ col.nullable ? 'NULL' : 'NOT NULL' }}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                
+                <div v-if="impactAnalysisResultNew.postgresql_lineage.dependencies && impactAnalysisResultNew.postgresql_lineage.dependencies.length > 0" class="simple-section">
+                  <div class="simple-label">의존성 ({{ impactAnalysisResultNew.postgresql_lineage.dependencies.length }}개)</div>
+                  <div class="detail-list">
+                    <div v-for="(dep, idx) in impactAnalysisResultNew.postgresql_lineage.dependencies" :key="idx" class="detail-item-clean">
+                      <span class="detail-item-value">{{ dep.table }}</span>
+                      <span class="detail-item-type">{{ dep.relationship }}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -2551,14 +3449,17 @@ import { marked } from 'marked'
 import { Network } from 'vis-network'
 import 'vis-network/styles/vis-network.min.css'
 import { useAuthStore } from './stores/auth.js'
+import { getApiUrl } from './config/api.js'
 import LoginModal from './components/LoginModal.vue'
 import SignupModal from './components/SignupModal.vue'
+import VocManagement from './components/voc/VocManagement.vue'
 
 const authStore = useAuthStore()
 
 // 인증 모달 상태
 const showLoginModal = ref(false)
 const showSignupModal = ref(false)
+const showVocModal = ref(false)
 
 // 사용자 관리 모달
 const showUserManagementModal = ref(false)
@@ -2593,6 +3494,20 @@ const dockerStatusLoading = ref(false)
 const dockerStatusError = ref('')
 const dockerContainerActionLoading = ref(false)
 const dockerContainerActionMessage = ref('')
+
+// 에러 로그 관련
+const errorLogs = ref([])
+const errorLogsLoading = ref(false)
+const errorLogsError = ref('')
+const errorLogFilters = ref({
+  system_type: '',
+  severity: '',
+  error_type: '',
+  start_date: '',
+  end_date: ''
+})
+const selectedErrorLog = ref(null)
+const showErrorLogDetailModal = ref(false)
 const showCreateApiKeyModal = ref(false)
 const isCreatingApiKey = ref(false)
 const createdApiKey = ref(null)
@@ -2771,7 +3686,7 @@ async function loadDbSchema() {
   dbSchemaError.value = ''
   
   try {
-    const response = await fetch('http://localhost:3001/api/db/schema')
+    const response = await fetch(getApiUrl('/api/db/schema'))
     
     if (!response.ok) {
       const errorText = await response.text()
@@ -2960,6 +3875,78 @@ async function loadDockerStatus() {
   }
 }
 
+// 에러 로그 로드
+async function loadErrorLogs() {
+  errorLogsLoading.value = true
+  errorLogsError.value = ''
+  
+  try {
+    const params = new URLSearchParams()
+    if (errorLogFilters.value.system_type) params.append('system_type', errorLogFilters.value.system_type)
+    if (errorLogFilters.value.severity) params.append('severity', errorLogFilters.value.severity)
+    if (errorLogFilters.value.error_type) params.append('error_type', errorLogFilters.value.error_type)
+    if (errorLogFilters.value.start_date) params.append('start_date', errorLogFilters.value.start_date)
+    if (errorLogFilters.value.end_date) params.append('end_date', errorLogFilters.value.end_date)
+    params.append('limit', '100')
+    
+    const response = await fetch(getApiUrl(`/api/error-log/history?${params.toString()}`))
+    
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+    }
+    
+    const data = await response.json()
+    
+    if (data.success) {
+      errorLogs.value = data.result || []
+      errorLogsError.value = ''
+    } else {
+      errorLogsError.value = data.error || '에러 로그를 불러올 수 없습니다.'
+    }
+  } catch (error) {
+    console.error('[에러 로그 로드] 오류:', error)
+    errorLogsError.value = `에러 로그를 불러오는 중 오류가 발생했습니다: ${error.message}`
+  } finally {
+    errorLogsLoading.value = false
+  }
+}
+
+// 필터 초기화
+function resetErrorLogFilters() {
+  errorLogFilters.value = {
+    system_type: '',
+    severity: '',
+    error_type: '',
+    start_date: '',
+    end_date: ''
+  }
+  loadErrorLogs()
+}
+
+// 에러 로그 상세 보기
+function showErrorLogDetail(log) {
+  selectedErrorLog.value = log
+  showErrorLogDetailModal.value = true
+}
+
+// 날짜 시간 포맷팅
+function formatDateTime(dateString) {
+  if (!dateString) return 'N/A'
+  try {
+    const date = new Date(dateString)
+    return date.toLocaleString('ko-KR', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit'
+    })
+  } catch {
+    return dateString
+  }
+}
+
 // 사용자 데이터 로드 (탭 변경 시)
 watch(userManagementTab, async (newTab) => {
   if (newTab === 'data') {
@@ -2970,6 +3957,8 @@ watch(userManagementTab, async (newTab) => {
     await loadDbSchema()
   } else if (newTab === 'docker') {
     await loadDockerStatus()
+  } else if (newTab === 'error-logs') {
+    await loadErrorLogs()
   }
 })
 
@@ -3282,6 +4271,7 @@ const showBookHistory = ref(false)
 const showScreenValidation = ref(false)
 const showSQLQueryAnalysis = ref(false)
 const showMCPGuide = ref(false)
+const showErrorLogAnalysis = ref(false)
 
 // SQL 쿼리 분석 관련
 const sqlQueryFile = ref('')
@@ -3296,7 +4286,82 @@ const impactAnalysisError = ref('')
 const impactTargetTable = ref('')
 const impactTargetColumn = ref('')
 const showImpactAnalysis = ref(false)
+
+// AI 테이블 영향도 분석 관련
+const impactTableName = ref('')
+const impactColumnName = ref('')
+const impactSpecialNotes = ref('')
+const impactAnalysisResultNew = ref(null)
+const isAnalyzingImpactNew = ref(false)
+const impactAnalysisErrorNew = ref('')
+const expandedSections = ref({
+  table_correlation: false,
+  program_table_correlation: false,
+  program_column_correlation: false,
+  ui_impact: false,
+  batch_procedure_impact: false,
+  postgresql_lineage: false
+})
 const showLineageVisualization = ref(false)
+
+// AI 에러로그분석 관련
+const errorLogFile = ref('')
+const errorLogContent = ref('')
+const errorLogInputMode = ref('direct') // 'direct' or 'file'
+const isAnalyzingErrorLog = ref(false)
+const errorLogAnalysisError = ref('')
+const errorLogAnalysisResult = ref(null)
+const showErrorLogHistory = ref(false)
+const errorLogHistory = ref([])
+
+// AI 에러 로그 현황 관련
+const showErrorLogStatusModal = ref(false)
+const errorLogStatusList = ref([])
+const errorLogStatusLoading = ref(false)
+const errorLogStatusError = ref('')
+const selectedErrorLogStatus = ref(null)
+const showErrorLogStatusDetailModal = ref(false)
+
+const toggleSection = (section) => {
+  expandedSections.value[section] = !expandedSections.value[section]
+}
+
+// 영향도 분석 결과 요약 함수들
+const getTotalImpactCount = () => {
+  if (!impactAnalysisResultNew.value) return 0
+  let count = 0
+  if (impactAnalysisResultNew.value.program_table_correlation) {
+    count += impactAnalysisResultNew.value.program_table_correlation.total_references || 0
+  }
+  if (impactAnalysisResultNew.value.program_column_correlation) {
+    count += impactAnalysisResultNew.value.program_column_correlation.total_references || 0
+  }
+  if (impactAnalysisResultNew.value.ui_impact) {
+    count += impactAnalysisResultNew.value.ui_impact.affected_vue_files || 0
+  }
+  if (impactAnalysisResultNew.value.batch_procedure_impact) {
+    count += impactAnalysisResultNew.value.batch_procedure_impact.affected_procedures || 0
+  }
+  return count
+}
+
+const getAffectedFilesCount = () => {
+  if (!impactAnalysisResultNew.value) return 0
+  const files = new Set()
+  if (impactAnalysisResultNew.value.table_correlation?.referenced_files) {
+    impactAnalysisResultNew.value.table_correlation.referenced_files.forEach(f => files.add(f))
+  }
+  if (impactAnalysisResultNew.value.ui_impact?.impacts) {
+    impactAnalysisResultNew.value.ui_impact.impacts.forEach(i => files.add(i.file))
+  }
+  return files.size
+}
+
+const getAffectedTablesCount = () => {
+  if (!impactAnalysisResultNew.value) return 0
+  return impactAnalysisResultNew.value.table_correlation?.related_tables?.length || 0
+}
+
 const lineageHtmlContent = ref('')
 const isGeneratingLineage = ref(false)
 const lineageGenerationProgress = ref(0)
@@ -3611,6 +4676,7 @@ const closeAllSections = () => {
   showNewsCollection.value = false
   showScreenValidation.value = false
   showSQLQueryAnalysis.value = false
+  showErrorLogAnalysis.value = false
   
   // 데이터 초기화
   aiArticles.value = []
@@ -6184,6 +7250,258 @@ const toggleSQLQueryAnalysis = () => {
   showSQLQueryAnalysis.value = true
 }
 
+const toggleImpactAnalysis = () => {
+  closeAllSections()
+  showImpactAnalysis.value = true
+}
+
+const toggleErrorLogAnalysis = () => {
+  closeAllSections()
+  showErrorLogAnalysis.value = true
+}
+
+// AI 에러 로그 현황 모달 열기
+const openErrorLogStatusModal = async () => {
+  console.log('[에러 로그 현황] 모달 열기')
+  showErrorLogStatusModal.value = true
+  console.log('[에러 로그 현황] showErrorLogStatusModal:', showErrorLogStatusModal.value)
+  await loadErrorLogStatus()
+}
+
+// AI 에러 로그 현황 모달 닫기
+const closeErrorLogStatusModal = () => {
+  showErrorLogStatusModal.value = false
+}
+
+// 에러 로그 현황 최신순 조회
+const loadErrorLogStatus = async () => {
+  errorLogStatusLoading.value = true
+  errorLogStatusError.value = ''
+  
+  try {
+    const response = await fetch(getApiUrl('/api/error-log/history?limit=100'))
+    
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+    }
+    
+    const data = await response.json()
+    
+    if (data.success) {
+      // 최신순으로 정렬 (created_at 기준 내림차순)
+      errorLogStatusList.value = (data.result || []).sort((a, b) => {
+        const dateA = new Date(a.created_at || a.timestamp || 0)
+        const dateB = new Date(b.created_at || b.timestamp || 0)
+        return dateB - dateA
+      })
+      errorLogStatusError.value = ''
+    } else {
+      errorLogStatusError.value = data.error || '에러 로그를 불러올 수 없습니다.'
+    }
+  } catch (error) {
+    console.error('[에러 로그 현황 로드] 오류:', error)
+    errorLogStatusError.value = `에러 로그를 불러오는 중 오류가 발생했습니다: ${error.message}`
+  } finally {
+    errorLogStatusLoading.value = false
+  }
+}
+
+// 에러 로그 현황 상세 보기
+const showErrorLogStatusDetail = (log) => {
+  selectedErrorLogStatus.value = log
+  showErrorLogStatusDetailModal.value = true
+}
+
+// 에러 로그 현황 상세 모달 닫기
+const closeErrorLogStatusDetail = () => {
+  showErrorLogStatusDetailModal.value = false
+  selectedErrorLogStatus.value = null
+}
+
+/**
+ * 에러 로그 분석 함수
+ * 
+ * 기능:
+ * - MCP 서버를 통해 에러 로그 분석 수행
+ */
+const analyzeErrorLog = async () => {
+  isAnalyzingErrorLog.value = true
+  errorLogAnalysisError.value = ''
+  errorLogAnalysisResult.value = null
+  
+  try {
+    const requestBody = {
+      log_file_path: errorLogInputMode.value === 'file' ? (errorLogFile.value.trim() || null) : null,
+      log_content: errorLogInputMode.value === 'direct' ? (errorLogContent.value.trim() || null) : null,
+      workspace_path: null // 현재 워크스페이스 사용
+    }
+    
+    console.log('[프론트엔드] 에러 로그 분석 요청:', requestBody)
+    
+    const response = await fetch('/api/error-log/analyze', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(requestBody)
+    })
+    
+    const data = await response.json()
+    console.log('[프론트엔드] 에러 로그 분석 응답:', data)
+    
+    if (!response.ok || !data.success) {
+      const errorMessage = data.error || data.details || `서버 오류 (${response.status} ${response.statusText})`
+      console.error('[프론트엔드] 에러 로그 분석 오류:', errorMessage)
+      errorLogAnalysisError.value = errorMessage
+      errorLogAnalysisResult.value = null
+      return
+    }
+    
+    if (data.success && data.result) {
+      // 결과를 HTML로 변환 (마크다운 파싱)
+      if (typeof data.result === 'string') {
+        // 마크다운을 HTML로 변환
+        try {
+          errorLogAnalysisResult.value = marked.parse(data.result)
+        } catch (e) {
+          // 마크다운 파싱 실패 시 기본 변환
+          errorLogAnalysisResult.value = data.result.replace(/\n/g, '<br>')
+        }
+      } else {
+        errorLogAnalysisResult.value = JSON.stringify(data.result, null, 2).replace(/\n/g, '<br>')
+      }
+      errorLogAnalysisError.value = ''
+      console.log('[프론트엔드] 에러 로그 분석 성공')
+      
+      // 분석 성공 시 자동으로 DB에 저장
+      const logContent = errorLogInputMode.value === 'direct' ? errorLogContent.value.trim() : ''
+      if (logContent) {
+        try {
+          const saveResponse = await fetch(getApiUrl('/api/error-log/save'), {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              log_content: logContent,
+              log_type: 'gcp' // 기본값, 나중에 파싱하여 자동 감지 가능
+            })
+          })
+          
+          const saveData = await saveResponse.json()
+          if (saveData.success) {
+            console.log('[프론트엔드] 에러 로그 자동 저장 성공')
+          }
+        } catch (saveError) {
+          console.warn('[프론트엔드] 에러 로그 자동 저장 실패:', saveError)
+          // 저장 실패해도 분석 결과는 표시
+        }
+      }
+    } else {
+      throw new Error(data.error || '에러 로그 분석 결과를 받을 수 없습니다.')
+    }
+  } catch (error) {
+    console.error('[프론트엔드] 에러 로그 분석 오류:', error)
+    errorLogAnalysisError.value = error.message || '에러 로그 분석 중 오류가 발생했습니다.'
+    errorLogAnalysisResult.value = null
+  } finally {
+    isAnalyzingErrorLog.value = false
+  }
+}
+
+/**
+ * 에러 로그 저장 함수
+ */
+const saveErrorLog = async () => {
+  const logContent = errorLogInputMode.value === 'direct' ? errorLogContent.value.trim() : ''
+  
+  if (!logContent) {
+    errorLogAnalysisError.value = '저장할 로그 내용이 없습니다.'
+    return
+  }
+  
+  try {
+    const response = await fetch(getApiUrl('/api/error-log/save'), {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        log_content: logContent,
+        log_type: 'gcp' // 기본값, 나중에 파싱하여 자동 감지 가능
+      })
+    })
+    
+    const data = await response.json()
+    
+    if (data.success) {
+      alert('에러 로그가 저장되었습니다.')
+    } else {
+      errorLogAnalysisError.value = data.error || '로그 저장에 실패했습니다.'
+    }
+  } catch (error) {
+    console.error('[프론트엔드] 에러 로그 저장 오류:', error)
+    errorLogAnalysisError.value = error.message || '에러 로그 저장 중 오류가 발생했습니다.'
+  }
+}
+
+/**
+ * 에러 로그 이력 조회 함수
+ */
+const loadErrorLogHistory = async () => {
+  try {
+    const response = await fetch('/api/error-log/history?limit=50')
+    const data = await response.json()
+    
+    if (data.success) {
+      errorLogHistory.value = data.result || []
+      showErrorLogHistory.value = true
+    } else {
+      errorLogAnalysisError.value = data.error || '이력 조회에 실패했습니다.'
+    }
+  } catch (error) {
+    console.error('[프론트엔드] 에러 로그 이력 조회 오류:', error)
+    errorLogAnalysisError.value = error.message || '에러 로그 이력 조회 중 오류가 발생했습니다.'
+  }
+}
+
+/**
+ * 이력에서 로그 불러오기 함수
+ */
+const loadLogFromHistory = (log) => {
+  errorLogContent.value = log.log_content
+  errorLogInputMode.value = 'direct'
+  showErrorLogHistory.value = false
+}
+
+/**
+ * 에러 로그 삭제 함수
+ */
+const deleteErrorLog = async (logId) => {
+  if (!confirm('이 로그를 삭제하시겠습니까?')) {
+    return
+  }
+  
+  try {
+    // 삭제 API는 나중에 구현 가능, 지금은 프론트엔드에서만 제거
+    errorLogHistory.value = errorLogHistory.value.filter(log => log.id !== logId)
+    alert('로그가 삭제되었습니다.')
+  } catch (error) {
+    console.error('[프론트엔드] 에러 로그 삭제 오류:', error)
+    errorLogAnalysisError.value = error.message || '에러 로그 삭제 중 오류가 발생했습니다.'
+  }
+}
+
+/**
+ * 에러 로그 분석 초기화 함수
+ */
+const clearErrorLogAnalysis = () => {
+  errorLogFile.value = ''
+  errorLogContent.value = ''
+  errorLogAnalysisError.value = ''
+  errorLogAnalysisResult.value = null
+}
+
 /**
  * SQL 쿼리 분석 함수
  * 
@@ -6399,6 +7717,158 @@ const clearImpactAnalysis = () => {
   impactTargetTable.value = ''
   impactTargetColumn.value = ''
   showImpactAnalysis.value = false
+}
+
+/**
+ * 특이사항에서 테이블명과 컬럼명 추출
+ */
+const extractTableAndColumnFromNotes = (notes) => {
+  if (!notes) return { table: null, column: null }
+  
+  let table = null
+  let column = null
+  
+  // "users 테이블의 user_id" 패턴 찾기
+  const tableMatch = notes.match(/(\w+)\s*테이블/i)
+  if (tableMatch) {
+    table = tableMatch[1]
+  }
+  
+  // 컬럼명 추출 패턴들
+  // "user_id가" 또는 "user_id 가" 패턴
+  const columnPattern1 = notes.match(/(\w+)\s*가/i)
+  if (columnPattern1) {
+    column = columnPattern1[1]
+  }
+  
+  // "테이블의 user_id" 패턴
+  if (!column) {
+    const columnPattern2 = notes.match(/테이블의\s+(\w+)/i)
+    if (columnPattern2) {
+      column = columnPattern2[1]
+    }
+  }
+  
+  // "컬럼 user_id" 또는 "항목 user_id" 패턴
+  if (!column) {
+    const columnPattern3 = notes.match(/(?:컬럼|항목|필드|column)\s+(\w+)/i)
+    if (columnPattern3) {
+      column = columnPattern3[1]
+    }
+  }
+  
+  // 일반적인 컬럼명 패턴 (언더스코어 포함)
+  if (!column) {
+    const columnPattern4 = notes.match(/\b([a-z_]+_id|[a-z_]+_name|[a-z_]+_date|[a-z_]+_at)\b/i)
+    if (columnPattern4) {
+      column = columnPattern4[1]
+    }
+  }
+  
+  return { table, column }
+}
+
+/**
+ * AI 테이블 영향도 분석 함수 (새로운 버전)
+ * 
+ * 기능:
+ * - 워크스페이스 전체를 스캔하여 테이블/컬럼 변경 시 영향도 분석
+ */
+const analyzeImpactNew = async () => {
+  // 특이사항에서 테이블명과 컬럼명 추출 시도
+  let tableName = impactTableName.value.trim()
+  let columnName = impactColumnName.value.trim()
+  
+  if (impactSpecialNotes.value.trim()) {
+    const extracted = extractTableAndColumnFromNotes(impactSpecialNotes.value)
+    if (!tableName && extracted.table) {
+      tableName = extracted.table
+      impactTableName.value = extracted.table
+    }
+    if (!columnName && extracted.column) {
+      columnName = extracted.column
+      impactColumnName.value = extracted.column
+    }
+  }
+  
+  if (!tableName) {
+    impactAnalysisErrorNew.value = '테이블명을 입력해주세요.'
+    return
+  }
+  
+  isAnalyzingImpactNew.value = true
+  impactAnalysisErrorNew.value = ''
+  impactAnalysisResultNew.value = null
+  
+  try {
+    const requestBody = {
+      table_name: tableName,
+      column_name: columnName || null,
+      special_notes: impactSpecialNotes.value.trim() || null
+    }
+    
+    console.log('[프론트엔드] 영향도 분석 요청:', requestBody)
+    
+    const response = await fetch('/api/impact/analyze', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(requestBody)
+    })
+    
+    const data = await response.json()
+    console.log('[프론트엔드] 영향도 분석 응답:', data)
+    
+    if (!response.ok || !data.success) {
+      // 에러 응답 처리
+      const errorMessage = data.error || data.details || `서버 오류 (${response.status} ${response.statusText})`
+      console.error('[프론트엔드] 영향도 분석 오류:', errorMessage)
+      
+      // stdout/stderr 정보가 있으면 함께 표시
+      let fullErrorMessage = errorMessage
+      if (data.stdout && typeof data.stdout === 'string') {
+        fullErrorMessage += `\n\n출력:\n${data.stdout.substring(0, 500)}`
+      }
+      if (data.stderr && typeof data.stderr === 'string') {
+        fullErrorMessage += `\n\n에러:\n${data.stderr.substring(0, 500)}`
+      }
+      
+      impactAnalysisErrorNew.value = fullErrorMessage
+      impactAnalysisResultNew.value = null
+      return
+    }
+    
+    if (data.success && data.result) {
+      impactAnalysisResultNew.value = data.result
+      impactAnalysisErrorNew.value = ''
+      // 첫 번째 섹션 자동 확장
+      if (data.result.table_correlation) {
+        expandedSections.value.table_correlation = true
+      }
+      console.log('[프론트엔드] 영향도 분석 성공:', data.result)
+    } else {
+      throw new Error(data.error || '영향도 분석 결과를 받을 수 없습니다.')
+    }
+  } catch (error) {
+    console.error('[프론트엔드] 영향도 분석 오류:', error)
+    impactAnalysisErrorNew.value = error.message || '영향도 분석 중 오류가 발생했습니다.'
+    impactAnalysisResultNew.value = null
+  } finally {
+    isAnalyzingImpactNew.value = false
+  }
+}
+
+const clearImpactAnalysisNew = () => {
+  impactTableName.value = ''
+  impactColumnName.value = ''
+  impactSpecialNotes.value = ''
+  impactAnalysisResultNew.value = null
+  impactAnalysisErrorNew.value = ''
+  // 섹션 접기 상태 초기화
+  Object.keys(expandedSections.value).forEach(key => {
+    expandedSections.value[key] = false
+  })
 }
 
 /**
@@ -7816,6 +9286,8 @@ onMounted(() => {
   font-size: 16px;
   box-sizing: border-box;
   overflow-x: hidden;
+  color: #213547;
+  background-color: #ffffff;
 }
 
 .main-header {
@@ -8213,6 +9685,620 @@ onMounted(() => {
     inset 0 2px 4px rgba(255, 255, 255, 0.3),
     inset 0 -2px 4px rgba(0, 0, 0, 0.1);
   border-color: rgba(255, 255, 255, 0.7);
+}
+
+/* AI 테이블 영향도 분석 버튼 - 연두색 */
+.btn-impact-analysis {
+  background: linear-gradient(135deg, rgba(144, 238, 144, 0.3) 0%, rgba(152, 251, 152, 0.2) 100%);
+  color: white;
+  border: 2px solid rgba(144, 238, 144, 0.5);
+  backdrop-filter: blur(10px);
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 
+    0 4px 15px rgba(0, 0, 0, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.3);
+}
+
+.btn-impact-analysis:hover {
+  background: linear-gradient(135deg, rgba(144, 238, 144, 0.4) 0%, rgba(152, 251, 152, 0.3) 100%);
+  transform: translateY(-3px) scale(1.02);
+  box-shadow: 
+    0 8px 25px rgba(144, 238, 144, 0.6),
+    inset 0 1px 0 rgba(255, 255, 255, 0.4);
+  border-color: rgba(144, 238, 144, 0.7);
+}
+
+.btn-impact-analysis.active {
+  background: linear-gradient(135deg, rgba(144, 238, 144, 0.45) 0%, rgba(152, 251, 152, 0.35) 100%);
+  box-shadow: 
+    0 6px 20px rgba(144, 238, 144, 0.7),
+    inset 0 2px 4px rgba(255, 255, 255, 0.3),
+    inset 0 -2px 4px rgba(0, 0, 0, 0.1);
+  border-color: rgba(144, 238, 144, 0.8);
+}
+
+/* AI 에러로그분석 섹션 */
+.error-log-analysis-section {
+  padding: 2rem;
+  background: linear-gradient(135deg, #ff6b6b 0%, #ee5a6f 50%, #c44569 100%);
+  border-radius: 24px;
+  box-shadow: 
+    0 20px 60px rgba(255, 107, 107, 0.3),
+    0 0 0 1px rgba(255, 255, 255, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  position: relative;
+  overflow: hidden;
+  height: fit-content;
+  backdrop-filter: blur(10px);
+  margin-top: 1.5rem;
+}
+
+.error-log-analysis-section::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 5px;
+  background: linear-gradient(90deg, 
+    #ff6b6b 0%, 
+    #ee5a6f 25%, 
+    #ff8787 50%, 
+    #ee5a6f 75%, 
+    #ff6b6b 100%);
+  background-size: 200% 100%;
+  animation: shimmer 3s ease-in-out infinite;
+}
+
+.error-log-analysis-section::after {
+  content: '';
+  position: absolute;
+  top: -50%;
+  right: -50%;
+  width: 200%;
+  height: 200%;
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.15) 0%, transparent 70%);
+  pointer-events: none;
+  animation: pulse 4s ease-in-out infinite;
+}
+
+.btn-error-log-analysis {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.2) 0%, rgba(255, 255, 255, 0.1) 100%);
+  color: white;
+  border: 2px solid rgba(255, 255, 255, 0.4);
+  backdrop-filter: blur(10px);
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 
+    0 4px 15px rgba(0, 0, 0, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.3);
+}
+
+.btn-error-log-analysis:hover {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.3) 0%, rgba(255, 255, 255, 0.2) 100%);
+  transform: translateY(-3px) scale(1.02);
+  box-shadow: 
+    0 8px 25px rgba(255, 107, 107, 0.5),
+    inset 0 1px 0 rgba(255, 255, 255, 0.4);
+  border-color: rgba(255, 255, 255, 0.6);
+}
+
+.btn-error-log-analysis.active {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.35) 0%, rgba(255, 255, 255, 0.25) 100%);
+  box-shadow: 
+    0 6px 20px rgba(255, 107, 107, 0.6),
+    inset 0 2px 4px rgba(255, 255, 255, 0.3),
+    inset 0 -2px 4px rgba(0, 0, 0, 0.1);
+  border-color: rgba(255, 255, 255, 0.7);
+}
+
+/* AI 에러 로그 현황 버튼 - 에러 로그 분석과 동일한 스타일 */
+.btn-error-log-status {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.2) 0%, rgba(255, 255, 255, 0.1) 100%);
+  color: white;
+  border: 2px solid rgba(255, 255, 255, 0.4);
+  backdrop-filter: blur(10px);
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 
+    0 4px 15px rgba(0, 0, 0, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.3);
+}
+
+.btn-error-log-status:hover {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.3) 0%, rgba(255, 255, 255, 0.2) 100%);
+  transform: translateY(-3px) scale(1.02);
+  box-shadow: 
+    0 8px 25px rgba(255, 107, 107, 0.5),
+    inset 0 1px 0 rgba(255, 255, 255, 0.4);
+  border-color: rgba(255, 255, 255, 0.6);
+}
+
+.btn-error-log-status.active {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.35) 0%, rgba(255, 255, 255, 0.25) 100%);
+  box-shadow: 
+    0 6px 20px rgba(255, 107, 107, 0.6),
+    inset 0 2px 4px rgba(255, 255, 255, 0.3),
+    inset 0 -2px 4px rgba(0, 0, 0, 0.1);
+  border-color: rgba(255, 255, 255, 0.7);
+}
+
+/* 에러 로그 분석 컨테이너 */
+.error-log-analysis-container {
+  margin-top: 1.5rem;
+  padding: 2rem;
+  background: white;
+  border-radius: 20px;
+  box-shadow: 
+    0 10px 40px rgba(255, 107, 107, 0.15),
+    0 0 0 1px rgba(255, 107, 107, 0.1);
+  border: 1px solid rgba(255, 107, 107, 0.2);
+}
+
+.error-log-analysis-notice {
+  background: linear-gradient(135deg, #ffe0e0 0%, #ffcccc 100%);
+  border-left: 5px solid #ff6b6b;
+  padding: 1.25rem;
+  margin-bottom: 2rem;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(255, 107, 107, 0.15);
+}
+
+.error-log-analysis-notice p {
+  margin: 0.5rem 0;
+  color: #c44569;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.error-log-analysis-actions {
+  display: flex;
+  gap: 1.25rem;
+  margin-top: 2rem;
+  flex-wrap: wrap;
+}
+
+.btn-analyze-error-log {
+  background: linear-gradient(135deg, #ff6b6b 0%, #ee5a6f 100%);
+  color: white;
+  border: none;
+  padding: 1rem 2rem;
+  border-radius: 12px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 
+    0 4px 15px rgba(255, 107, 107, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.btn-analyze-error-log:hover:not(:disabled) {
+  transform: translateY(-3px) scale(1.02);
+  box-shadow: 
+    0 8px 25px rgba(255, 107, 107, 0.6),
+    inset 0 1px 0 rgba(255, 255, 255, 0.3);
+}
+
+.btn-analyze-error-log:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.btn-clear-error-log {
+  background: linear-gradient(135deg, #95a5a6 0%, #7f8c8d 100%);
+  color: white;
+  border: none;
+  padding: 1rem 2rem;
+  border-radius: 12px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 
+    0 4px 15px rgba(149, 165, 166, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.btn-clear-error-log:hover {
+  transform: translateY(-3px) scale(1.02);
+  box-shadow: 
+    0 8px 25px rgba(149, 165, 166, 0.6),
+    inset 0 1px 0 rgba(255, 255, 255, 0.3);
+}
+
+.error-log-analysis-results {
+  margin-top: 2rem;
+  padding: 1.5rem;
+  background: #f8f9fa;
+  border-radius: 12px;
+  border: 1px solid #e9ecef;
+  text-align: left;
+}
+
+.error-log-analysis-results h3 {
+  margin-top: 0;
+  margin-bottom: 1.5rem;
+  color: #333;
+  text-align: left;
+  font-size: 1.5rem;
+  font-weight: 600;
+  border-bottom: 2px solid #ff6b6b;
+  padding-bottom: 0.75rem;
+}
+
+.error-log-content {
+  background: white;
+  padding: 2rem;
+  border-radius: 8px;
+  border: 1px solid #dee2e6;
+  font-size: 14px;
+  line-height: 1.8;
+  text-align: left;
+  color: #333;
+  overflow-x: auto;
+}
+
+/* 마크다운 스타일링 */
+.error-log-content h1,
+.error-log-content h2,
+.error-log-content h3,
+.error-log-content h4 {
+  text-align: left;
+  margin-top: 1.5rem;
+  margin-bottom: 1rem;
+  color: #2c3e50;
+  font-weight: 600;
+}
+
+.error-log-content h1 {
+  font-size: 1.75rem;
+  border-bottom: 3px solid #ff6b6b;
+  padding-bottom: 0.5rem;
+}
+
+.error-log-content h2 {
+  font-size: 1.5rem;
+  border-bottom: 2px solid #ff6b6b;
+  padding-bottom: 0.5rem;
+}
+
+.error-log-content h3 {
+  font-size: 1.25rem;
+  color: #34495e;
+}
+
+.error-log-content h4 {
+  font-size: 1.1rem;
+  color: #555;
+}
+
+.error-log-content p {
+  text-align: left;
+  margin: 0.75rem 0;
+  line-height: 1.8;
+}
+
+.error-log-content ul,
+.error-log-content ol {
+  text-align: left;
+  margin: 1rem 0;
+  padding-left: 2rem;
+}
+
+.error-log-content li {
+  margin: 0.5rem 0;
+  line-height: 1.8;
+}
+
+.error-log-content table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1.5rem 0;
+  text-align: left;
+  font-size: 13px;
+  background: white;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.error-log-content table th {
+  background: linear-gradient(135deg, #ff6b6b 0%, #ee5a6f 100%);
+  color: white;
+  padding: 0.75rem 1rem;
+  text-align: left;
+  font-weight: 600;
+  border: 1px solid #dee2e6;
+}
+
+.error-log-content table td {
+  padding: 0.75rem 1rem;
+  text-align: left;
+  border: 1px solid #dee2e6;
+  background: #f8f9fa;
+}
+
+.error-log-content table tr:nth-child(even) td {
+  background: #ffffff;
+}
+
+.error-log-content table tr:hover td {
+  background: #fff5f5;
+}
+
+.error-log-content pre {
+  background: #2d2d2d;
+  color: #f8f8f2;
+  padding: 1.25rem;
+  border-radius: 8px;
+  overflow-x: auto;
+  margin: 1rem 0;
+  text-align: left;
+  font-family: 'Courier New', 'Consolas', monospace;
+  font-size: 13px;
+  line-height: 1.6;
+  border: 1px solid #444;
+}
+
+.error-log-content code {
+  background: #f4f4f4;
+  color: #e83e8c;
+  padding: 0.2rem 0.4rem;
+  border-radius: 4px;
+  font-family: 'Courier New', 'Consolas', monospace;
+  font-size: 13px;
+}
+
+.error-log-content pre code {
+  background: transparent;
+  color: #f8f8f2;
+  padding: 0;
+}
+
+.error-log-content blockquote {
+  border-left: 4px solid #ff6b6b;
+  padding-left: 1rem;
+  margin: 1rem 0;
+  color: #666;
+  font-style: italic;
+  text-align: left;
+}
+
+.error-log-content strong {
+  color: #2c3e50;
+  font-weight: 600;
+}
+
+.error-log-content em {
+  color: #555;
+  font-style: italic;
+}
+
+.error-log-content hr {
+  border: none;
+  border-top: 2px solid #dee2e6;
+  margin: 2rem 0;
+}
+
+.error-log-content a {
+  color: #ff6b6b;
+  text-decoration: none;
+}
+
+.error-log-content a:hover {
+  text-decoration: underline;
+}
+
+.input-mode-selector {
+  display: flex;
+  gap: 1rem;
+  margin-top: 0.5rem;
+}
+
+.radio-label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  padding: 0.5rem 1rem;
+  border-radius: 8px;
+  background: #f8f9fa;
+  transition: all 0.3s;
+}
+
+.radio-label:hover {
+  background: #e9ecef;
+}
+
+.radio-label input[type="radio"] {
+  cursor: pointer;
+}
+
+.btn-save-error-log {
+  background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+  color: white;
+  border: none;
+  padding: 1rem 2rem;
+  border-radius: 12px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 
+    0 4px 15px rgba(40, 167, 69, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.btn-save-error-log:hover:not(:disabled) {
+  transform: translateY(-3px) scale(1.02);
+  box-shadow: 
+    0 8px 25px rgba(40, 167, 69, 0.6),
+    inset 0 1px 0 rgba(255, 255, 255, 0.3);
+}
+
+.btn-save-error-log:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.btn-load-history {
+  background: linear-gradient(135deg, #17a2b8 0%, #138496 100%);
+  color: white;
+  border: none;
+  padding: 1rem 2rem;
+  border-radius: 12px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 
+    0 4px 15px rgba(23, 162, 184, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.btn-load-history:hover {
+  transform: translateY(-3px) scale(1.02);
+  box-shadow: 
+    0 8px 25px rgba(23, 162, 184, 0.6),
+    inset 0 1px 0 rgba(255, 255, 255, 0.3);
+}
+
+.error-log-history-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.modal-content {
+  background: white;
+  border-radius: 12px;
+  max-width: 800px;
+  width: 90%;
+  max-height: 80vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1.5rem;
+  border-bottom: 1px solid #dee2e6;
+}
+
+.modal-header h3 {
+  margin: 0;
+}
+
+.modal-close {
+  background: none;
+  border: none;
+  font-size: 2rem;
+  cursor: pointer;
+  color: #6c757d;
+  line-height: 1;
+}
+
+.modal-close:hover {
+  color: #343a40;
+}
+
+.modal-body {
+  padding: 1.5rem;
+  overflow-y: auto;
+}
+
+.empty-history {
+  text-align: center;
+  padding: 3rem;
+  color: #6c757d;
+}
+
+.history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.history-item {
+  border: 1px solid #dee2e6;
+  border-radius: 8px;
+  padding: 1rem;
+  background: #f8f9fa;
+}
+
+.history-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.5rem;
+  gap: 1rem;
+}
+
+.history-date {
+  font-weight: 600;
+  color: #333;
+}
+
+.history-type {
+  padding: 0.25rem 0.75rem;
+  background: #ff6b6b;
+  color: white;
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+.history-content {
+  color: #666;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.btn-load-log {
+  background: #17a2b8;
+  color: white;
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.btn-load-log:hover {
+  background: #138496;
+}
+
+.btn-delete-log {
+  background: #dc3545;
+  color: white;
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.btn-delete-log:hover {
+  background: #c82333;
 }
 
 /* 화면 검증 컨테이너 */
@@ -8773,6 +10859,7 @@ onMounted(() => {
 .sql-query-analysis-container {
   padding: 2rem;
   background: linear-gradient(135deg, #fff8f0 0%, #ffffff 100%);
+  color: #213547;
   border: 3px solid #ff8c42;
   border-radius: 20px;
   box-shadow: 
@@ -9268,8 +11355,26 @@ onMounted(() => {
   margin-top: 2rem;
   padding: 1.5rem;
   background: #f8f9fa;
+  color: #213547;
   border-radius: 12px;
   border: 1px solid #e0e0e0;
+}
+
+.impact-analysis-container {
+  margin-top: 1.5rem;
+  padding: 2rem;
+  background: white;
+  color: #213547;
+  border-radius: 16px;
+  text-align: left;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.12);
+  animation: slideDown 0.3s ease;
+  width: 100%;
+  max-width: 100%;
+  margin-left: auto;
+  margin-right: auto;
+  border: 1px solid rgba(0, 0, 0, 0.05);
+  box-sizing: border-box;
 }
 
 .impact-analysis-header {
@@ -9318,49 +11423,59 @@ onMounted(() => {
 .impact-analysis-actions {
   display: flex;
   gap: 1rem;
+  justify-content: flex-start;
+  margin-top: 1rem;
 }
 
 .btn-analyze-impact {
   padding: 0.75rem 1.5rem;
-  background: #667eea;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   color: white;
   border: none;
-  border-radius: 6px;
-  font-size: 0.9rem;
-  font-weight: 600;
+  border-radius: 8px;
+  font-size: 0.95rem;
+  font-weight: 700;
   cursor: pointer;
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  transition: background 0.2s;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
 }
 
 .btn-analyze-impact:hover:not(:disabled) {
-  background: #5568d3;
+  background: linear-gradient(135deg, #5568d3 0%, #653a8f 100%);
+  box-shadow: 0 6px 16px rgba(102, 126, 234, 0.4);
+  transform: translateY(-2px);
 }
 
 .btn-analyze-impact:disabled {
-  background: #ccc;
+  background: #95a5a6;
   cursor: not-allowed;
+  box-shadow: none;
+  transform: none;
 }
 
 .btn-clear-impact {
   padding: 0.75rem 1.5rem;
-  background: #f5f5f5;
-  color: #333;
-  border: 1px solid #ddd;
-  border-radius: 6px;
-  font-size: 0.9rem;
-  font-weight: 600;
+  background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 0.95rem;
+  font-weight: 700;
   cursor: pointer;
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  transition: background 0.2s;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 12px rgba(231, 76, 60, 0.3);
 }
 
 .btn-clear-impact:hover {
-  background: #e0e0e0;
+  background: linear-gradient(135deg, #c0392b 0%, #a93226 100%);
+  box-shadow: 0 6px 16px rgba(231, 76, 60, 0.4);
+  transform: translateY(-2px);
 }
 
 .impact-analysis-results {
@@ -9369,6 +11484,16 @@ onMounted(() => {
   background: #ffffff;
   border-radius: 8px;
   border: 1px solid #e0e0e0;
+  text-align: left;
+}
+
+.impact-analysis-results h3 {
+  text-align: left;
+  margin-top: 0;
+  margin-bottom: 1.5rem;
+  color: #213547;
+  font-size: 1.5rem;
+  font-weight: 700;
 }
 
 .impact-analysis-results h5 {
@@ -13334,6 +15459,779 @@ onMounted(() => {
   text-align: center;
   padding: 40px;
   color: #666;
+}
+
+/* 영향도 분석 결과 카드 스타일 */
+.impact-summary-card {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  padding: 1.5rem;
+  border-radius: 12px;
+  margin-bottom: 1.5rem;
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+}
+
+.summary-header h4 {
+  margin: 0 0 1rem 0;
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: white;
+}
+
+.summary-content {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.summary-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.summary-label {
+  font-weight: 600;
+  opacity: 0.9;
+}
+
+.summary-value {
+  font-weight: 500;
+}
+
+.impact-analysis-card {
+  background: white;
+  border-radius: 12px;
+  margin-bottom: 1.5rem;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  border: 1px solid rgba(0, 0, 0, 0.05);
+  overflow: hidden;
+  transition: all 0.3s ease;
+}
+
+.impact-analysis-card:hover {
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+}
+
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1.25rem 1.5rem;
+  background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%);
+  border-bottom: 2px solid #e9ecef;
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+
+.card-header:hover {
+  background: linear-gradient(135deg, #e9ecef 0%, #f8f9fa 100%);
+}
+
+.card-title {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.card-icon {
+  font-size: 1.5rem;
+}
+
+.card-title h4 {
+  margin: 0;
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #213547;
+}
+
+.toggle-btn {
+  background: none;
+  border: none;
+  font-size: 1.2rem;
+  color: #667eea;
+  cursor: pointer;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+}
+
+.toggle-btn:hover {
+  background: rgba(102, 126, 234, 0.1);
+}
+
+.card-summary {
+  padding: 1rem 1.5rem;
+  background: #f8f9fa;
+  border-bottom: 1px solid #e9ecef;
+}
+
+.card-summary p {
+  margin: 0;
+  color: #495057;
+  font-size: 0.95rem;
+  line-height: 1.6;
+  font-weight: 500;
+}
+
+.card-details {
+  padding: 1.5rem;
+  background: white;
+}
+
+.detail-section {
+  margin-bottom: 1.5rem;
+}
+
+.detail-section:last-child {
+  margin-bottom: 0;
+}
+
+.detail-section h5 {
+  margin: 0 0 0.75rem 0;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #495057;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.stat-badge {
+  display: inline-block;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  padding: 0.5rem 1rem;
+  border-radius: 20px;
+  font-weight: 600;
+  font-size: 0.9rem;
+  box-shadow: 0 2px 4px rgba(102, 126, 234, 0.2);
+}
+
+.detail-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.detail-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.75rem;
+  background: #f8f9fa;
+  border-radius: 8px;
+}
+
+.detail-label {
+  font-size: 0.85rem;
+  color: #6c757d;
+  font-weight: 500;
+}
+
+.detail-value {
+  font-size: 1.1rem;
+  color: #213547;
+  font-weight: 700;
+}
+
+.tag-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.tag {
+  display: inline-block;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  padding: 0.4rem 0.8rem;
+  border-radius: 16px;
+  font-size: 0.85rem;
+  font-weight: 500;
+  box-shadow: 0 2px 4px rgba(102, 126, 234, 0.2);
+}
+
+.relation-list,
+.reference-list,
+.impact-list,
+.procedure-list,
+.column-list,
+.dependency-list,
+.file-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.relation-item,
+.reference-item,
+.impact-item,
+.procedure-item,
+.column-item,
+.dependency-item,
+.file-item {
+  padding: 0.75rem;
+  background: #f8f9fa;
+  border-radius: 8px;
+  border-left: 3px solid #667eea;
+  transition: all 0.2s ease;
+}
+
+.relation-item:hover,
+.reference-item:hover,
+.impact-item:hover,
+.procedure-item:hover,
+.column-item:hover,
+.dependency-item:hover,
+.file-item:hover {
+  background: #e9ecef;
+  transform: translateX(4px);
+}
+
+.relation-table,
+.proc-name,
+.col-name,
+.dep-table {
+  font-weight: 600;
+  color: #213547;
+  margin-right: 0.5rem;
+}
+
+.relation-type,
+.proc-type,
+.col-type,
+.dep-relation {
+  display: inline-block;
+  background: #667eea;
+  color: white;
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  margin-right: 0.5rem;
+}
+
+.relation-file,
+.proc-file {
+  color: #6c757d;
+  font-size: 0.85rem;
+  margin-left: auto;
+}
+
+.ref-file {
+  font-weight: 600;
+  color: #213547;
+  margin-right: 0.5rem;
+}
+
+.ref-line {
+  color: #667eea;
+  font-weight: 500;
+  font-size: 0.85rem;
+  margin-right: 0.5rem;
+}
+
+.ref-context {
+  margin-top: 0.5rem;
+  padding: 0.5rem;
+  background: white;
+  border-radius: 4px;
+  font-family: 'Courier New', monospace;
+  font-size: 0.8rem;
+  color: #495057;
+  border: 1px solid #dee2e6;
+  word-break: break-all;
+}
+
+.impact-file {
+  font-weight: 600;
+  color: #213547;
+  margin-right: 0.5rem;
+}
+
+.impact-type {
+  display: inline-block;
+  background: #28a745;
+  color: white;
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.75rem;
+}
+
+.schema-info {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem;
+  background: #f8f9fa;
+  border-radius: 8px;
+}
+
+.schema-label {
+  font-weight: 600;
+  color: #495057;
+}
+
+.schema-value {
+  color: #213547;
+  font-weight: 500;
+}
+
+.col-nullable {
+  display: inline-block;
+  background: #6c757d;
+  color: white;
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  margin-left: 0.5rem;
+}
+
+/* 영향도 분석 입력 필드 왼쪽 정렬 */
+.impact-analysis-container .input-group {
+  text-align: left;
+}
+
+.impact-analysis-container .input-group label {
+  text-align: left;
+  display: block;
+  margin-bottom: 0.5rem;
+  font-weight: 600;
+  color: #213547;
+}
+
+.impact-analysis-container .input-field {
+  width: 100%;
+  text-align: left;
+  padding: 0.75rem;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  font-size: 0.95rem;
+  color: #213547;
+}
+
+.impact-analysis-container .input-field:focus {
+  outline: none;
+  border-color: #667eea;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+/* 영향도 분석 컨테이너 제목 및 알림 왼쪽 정렬 */
+.impact-analysis-container h2 {
+  text-align: left;
+  margin-top: 0;
+  margin-bottom: 1rem;
+  color: #213547;
+  font-size: 1.5rem;
+  font-weight: 700;
+}
+
+.impact-analysis-notice {
+  text-align: left;
+  margin-bottom: 1.5rem;
+}
+
+.impact-analysis-notice p {
+  text-align: left;
+  margin: 0.5rem 0;
+  color: #495057;
+  font-size: 0.95rem;
+  line-height: 1.6;
+}
+
+/* 영향도 분석 결과 카드 내부 모든 요소 왼쪽 정렬 */
+.impact-summary-card,
+.impact-analysis-card,
+.card-header,
+.card-title,
+.card-summary,
+.card-details,
+.detail-section,
+.detail-grid,
+.detail-item,
+.tag-list,
+.relation-list,
+.reference-list,
+.impact-list,
+.procedure-list,
+.column-list,
+.dependency-list,
+.file-list {
+  text-align: left;
+}
+
+.card-title h4,
+.card-summary p,
+.detail-section h5,
+.summary-header h4,
+.summary-content,
+.summary-item {
+  text-align: left;
+}
+
+/* 간단한 영향도 분석 결과 스타일 */
+.impact-summary-simple {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  padding: 1.5rem;
+  border-radius: 12px;
+  margin-bottom: 1.5rem;
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+}
+
+.summary-main {
+  margin-bottom: 1.5rem;
+}
+
+.summary-target {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 1.1rem;
+}
+
+.target-label {
+  font-weight: 600;
+  opacity: 0.9;
+}
+
+.target-name {
+  font-weight: 700;
+  font-size: 1.2rem;
+}
+
+.target-column {
+  font-weight: 600;
+  opacity: 0.9;
+}
+
+.impact-overview {
+  display: flex;
+  gap: 2rem;
+  justify-content: center;
+  padding-top: 1rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.overview-item {
+  text-align: center;
+}
+
+.overview-number {
+  display: block;
+  font-size: 2rem;
+  font-weight: 700;
+  line-height: 1;
+  margin-bottom: 0.5rem;
+}
+
+.overview-label {
+  font-size: 0.9rem;
+  opacity: 0.9;
+}
+
+.impact-card-simple {
+  background: white;
+  border-radius: 10px;
+  margin-bottom: 1rem;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  border: 1px solid #e9ecef;
+  overflow: hidden;
+}
+
+.card-header-simple {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem 1.25rem;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.card-header-simple:hover {
+  background: #f8f9fa;
+}
+
+.card-title-simple {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex: 1;
+}
+
+.card-icon-simple {
+  font-size: 1.5rem;
+  flex-shrink: 0;
+}
+
+.card-title-main {
+  font-size: 1rem;
+  font-weight: 700;
+  color: #213547;
+  margin-bottom: 0.25rem;
+}
+
+.card-title-sub {
+  font-size: 0.85rem;
+  color: #6c757d;
+  line-height: 1.4;
+}
+
+.toggle-btn-simple {
+  background: none;
+  border: none;
+  font-size: 1rem;
+  color: #667eea;
+  cursor: pointer;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  transition: background 0.2s;
+}
+
+.toggle-btn-simple:hover {
+  background: rgba(102, 126, 234, 0.1);
+}
+
+.card-content-simple {
+  padding: 1rem 1.25rem;
+  background: #f8f9fa;
+  border-top: 1px solid #e9ecef;
+}
+
+.simple-section {
+  margin-bottom: 1rem;
+}
+
+.simple-section:last-child {
+  margin-bottom: 0;
+}
+
+.simple-label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #495057;
+  margin-bottom: 0.5rem;
+  display: block;
+}
+
+.simple-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.simple-tag {
+  display: inline-block;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  padding: 0.35rem 0.75rem;
+  border-radius: 16px;
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+
+.simple-files {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.simple-file {
+  padding: 0.5rem;
+  background: white;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  color: #495057;
+  border-left: 3px solid #667eea;
+}
+
+.simple-more {
+  padding: 0.5rem;
+  text-align: center;
+  font-size: 0.85rem;
+  color: #6c757d;
+  font-style: italic;
+}
+
+.simple-stats {
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+}
+
+.simple-stat {
+  text-align: center;
+  padding: 0.75rem 1rem;
+  background: white;
+  border-radius: 8px;
+  min-width: 80px;
+}
+
+.stat-number {
+  display: block;
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #667eea;
+  line-height: 1;
+  margin-bottom: 0.25rem;
+}
+
+.stat-label {
+  font-size: 0.75rem;
+  color: #6c757d;
+  font-weight: 500;
+}
+
+/* 상세 내용 스타일 */
+.simple-stat-badge {
+  display: inline-block;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  padding: 0.5rem 1rem;
+  border-radius: 20px;
+  font-weight: 600;
+  font-size: 0.95rem;
+  margin-top: 0.5rem;
+  box-shadow: 0 2px 4px rgba(102, 126, 234, 0.2);
+}
+
+.simple-stat-badge-secondary {
+  display: inline-block;
+  background: #e9ecef;
+  color: #495057;
+  padding: 0.4rem 0.8rem;
+  border-radius: 16px;
+  font-weight: 500;
+  font-size: 0.85rem;
+  margin-top: 0.5rem;
+  margin-left: 0.5rem;
+}
+
+.detail-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+}
+
+.detail-item-clean {
+  padding: 0.875rem;
+  background: white;
+  border-radius: 8px;
+  border-left: 3px solid #667eea;
+  transition: all 0.2s ease;
+}
+
+.detail-item-clean:hover {
+  background: #f8f9fa;
+  transform: translateX(4px);
+}
+
+.detail-item-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.detail-item-label {
+  font-weight: 600;
+  color: #495057;
+  font-size: 0.9rem;
+}
+
+.detail-item-value {
+  font-weight: 600;
+  color: #213547;
+  font-size: 0.95rem;
+}
+
+.procedure-name {
+  font-size: 1rem;
+  color: #667eea;
+}
+
+.detail-item-file {
+  color: #6c757d;
+  font-size: 0.85rem;
+  margin-top: 0.25rem;
+  font-family: 'Courier New', monospace;
+}
+
+.detail-item-line {
+  color: #667eea;
+  font-weight: 500;
+  font-size: 0.85rem;
+  background: rgba(102, 126, 234, 0.1);
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+}
+
+.detail-item-type {
+  display: inline-block;
+  background: #6c757d;
+  color: white;
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.detail-item-type-badge {
+  display: inline-block;
+  padding: 0.25rem 0.6rem;
+  border-radius: 12px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.type-table {
+  background: #667eea;
+  color: white;
+}
+
+.type-column {
+  background: #28a745;
+  color: white;
+}
+
+.detail-item-context {
+  margin-top: 0.5rem;
+  padding: 0.5rem;
+  background: #f8f9fa;
+  border-radius: 4px;
+  font-family: 'Courier New', monospace;
+  font-size: 0.8rem;
+  color: #495057;
+  border: 1px solid #dee2e6;
+  word-break: break-all;
+  line-height: 1.5;
+}
+
+.detail-item-info {
+  margin-top: 0.25rem;
+  font-size: 0.85rem;
+  color: #6c757d;
+}
+
+.detail-item-nullable {
+  display: inline-block;
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  margin-left: 0.5rem;
+}
+
+.nullable-yes {
+  background: #6c757d;
+  color: white;
+}
+
+.nullable-no {
+  background: #dc3545;
+  color: white;
 }
 </style>
 

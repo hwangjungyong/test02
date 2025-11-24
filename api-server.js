@@ -1,12 +1,12 @@
 #!/usr/bin/env node
 
 /**
- * 백엔드 API 서버 - News API 및 Last.fm API 프록시
+ * 백엔드 API 서버 - MCP 서버 통합 및 외부 API 프록시
  * 
  * 역할:
  * - Vue 앱에서 외부 API를 호출할 때 CORS 문제를 해결하기 위한 프록시 서버
  * - 프록시 환경에서 외부 API를 호출하기 위한 중간 서버
- * - News API와 Last.fm API를 프록시를 통해 호출
+ * - ✅ MCP 서버 통합: 뉴스 검색 등 주요 기능을 MCP 서버를 통해 제공
  * 
  * 실행 방법:
  *   npm run api-server
@@ -14,8 +14,8 @@
  * 포트: http://localhost:3001
  * 
  * API 엔드포인트:
- *   GET /api/news?q=키워드 - News API 검색
- *   GET /api/news/economy?q=키워드 - 경제 뉴스 검색
+ *   GET /api/news?q=키워드 - 뉴스 검색 (MCP 서버 사용)
+ *   GET /api/news/economy?q=키워드 - 경제 뉴스 검색 (MCP 서버 사용)
  *   GET /api/music/recommend?songTitle=제목&artist=아티스트 - 음악 추천
  *   GET /api/music/radio/current?station=방송국&limit=개수 - 현재 재생 중인 노래
  *   GET /api/music/radio/recent?station=방송국&limit=개수 - 최근 재생된 노래
@@ -23,6 +23,12 @@
  *   GET /api/books/recommend?keyword=키워드&category=카테고리 - 도서 추천
  *   GET /api-docs - Swagger UI (API 문서화 및 테스트)
  *   GET /swagger.json - Swagger OpenAPI 스펙 JSON
+ * 
+ * MCP 서버 통합:
+ *   - 뉴스 검색: mcp-server.js의 searchNewsArticles() 함수 사용
+ *   - 에러 로그 분석: mcp-error-log-analyzer.py 사용
+ *   - SQL 쿼리 분석: mcp-sql-query-analyzer.py 사용
+ *   - 영향도 분석: mcp-impact-analyzer.py 사용
  */
 
 import http from 'http';
@@ -35,9 +41,10 @@ import { dirname, join } from 'path';
 import dotenv from 'dotenv';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
-import { userDB, newsDB, radioSongsDB, booksDB, apiKeysDB, apiKeyUsageDB, init, getSchema, getTables } from './database.js';
+import { userDB, newsDB, radioSongsDB, booksDB, apiKeysDB, apiKeyUsageDB, errorLogsDB, srRequestsDB, srHistoryDB, confluenceCacheDB, gitCommitsDB, dbChangesDB, init, getSchema, getTables } from './database.js';
 import { exec } from 'child_process';
 import { promisify } from 'util';
+import { searchNewsArticles } from './mcp-server.js';
 
 const execAsync = promisify(exec);
 
@@ -1371,80 +1378,37 @@ const server = http.createServer(async (req, res) => {
       weekAgo.setDate(today.getDate() - 7);
       const fromDate = weekAgo.toISOString().split('T')[0]; // YYYY-MM-DD 형식
 
-      // News API에서 여러 페이지를 가져와서 합치기 (일주일치 전체)
-      let allArticles = [];
-      const maxPages = 10; // 최대 10페이지 (100개씩 = 최대 1000개)
-      const pageSize = 100;
-      
-      for (let page = 1; page <= maxPages; page++) {
-        // News API 호출 (최근 일주일 필터링)
-        const apiUrl = `${NEWS_API_BASE_URL}/everything?q=${encodeURIComponent(q)}&language=ko&sortBy=publishedAt&pageSize=${pageSize}&page=${page}&from=${fromDate}&apiKey=${NEWS_API_KEY}`;
-        
-        if (page === 1) {
-          console.log(`[API 서버] News API 호출 (AI 뉴스): ${apiUrl}`);
-          console.log(`[API 서버] 프록시 사용: ${PROXY_URL}`);
-          console.log(`[API 서버] 검색 기간: ${fromDate} ~ ${today.toISOString().split('T')[0]} (최근 일주일)`);
-        }
-        
-        const response = await makeRequest(apiUrl);
-        
-        if (!response.ok) {
-          if (page === 1) {
-            const errorData = await response.json().catch(() => ({}));
-            console.error(`[API 서버] News API 오류: ${response.status}`, errorData);
-            res.writeHead(response.status, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ error: errorData.message || response.statusText, status: response.status }));
-            return;
-          }
-          break; // 첫 페이지가 아니면 중단
-        }
-        
-        const pageData = await response.json();
-        
-        if (!pageData.articles || pageData.articles.length === 0) {
-          break; // 더 이상 기사가 없으면 중단
-        }
-        
-        // 일주일 이상 지난 기사 필터링 (추가 안전장치)
-        const now = new Date();
-        const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-        const filteredArticles = pageData.articles.filter(article => {
-          if (!article.publishedAt) return false;
-          const publishedDate = new Date(article.publishedAt);
-          return publishedDate >= oneWeekAgo;
-        });
-        
-        allArticles = allArticles.concat(filteredArticles);
-        
-        // 전체 결과 수 확인 (첫 페이지에서만)
-        if (page === 1 && pageData.totalResults) {
-          const totalResults = pageData.totalResults;
-          console.log(`[API 서버] News API 전체 결과: ${totalResults}개 기사`);
-        }
-        
-        // 페이지당 기사 수가 pageSize보다 적으면 마지막 페이지
-        if (pageData.articles.length < pageSize) {
-          break;
-        }
-      }
-      
-      // 중복 제거 (URL 기준)
-      const uniqueArticles = [];
-      const seenUrls = new Set();
-      for (const article of allArticles) {
-        if (article.url && !seenUrls.has(article.url)) {
-          seenUrls.add(article.url);
-          uniqueArticles.push(article);
-        }
-      }
-      
+      console.log(`[API 서버] MCP 서버를 통해 뉴스 검색 (AI 뉴스): ${q}`);
+      console.log(`[API 서버] 검색 기간: ${fromDate} ~ ${today.toISOString().split('T')[0]} (최근 일주일)`);
+
+      // MCP 서버의 뉴스 검색 함수 호출
+      const result = await searchNewsArticles(q, {
+        pageSize: 100,
+        maxPages: 10,
+        fromDate: fromDate,
+        language: 'ko',
+        sortBy: 'publishedAt'
+      });
+
+      // 원본 News API 형식으로 변환
       const data = {
-        status: 'ok',
-        totalResults: uniqueArticles.length,
-        articles: uniqueArticles
+        status: result.status || 'ok',
+        totalResults: result.totalResults || result.articles.length,
+        articles: result.articles.map(article => ({
+          title: article.title,
+          description: article.description || article.summary,
+          content: article.content,
+          url: article.url,
+          urlToImage: article.urlToImage,
+          publishedAt: article.publishedAt,
+          source: {
+            name: article.source
+          },
+          author: article.author
+        }))
       };
       
-      console.log(`[API 서버] News API 응답 (AI 뉴스): ${uniqueArticles.length}개 기사 (최근 일주일, 중복 제거 후)`);
+      console.log(`[API 서버] MCP 서버 응답 (AI 뉴스): ${data.articles.length}개 기사 (최근 일주일, 중복 제거 후)`);
 
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify(data));
@@ -1584,13 +1548,77 @@ const server = http.createServer(async (req, res) => {
       // 검색 쿼리를 단순화: 기본 키워드 + 경제 키워드
       const searchQuery = `${q} (${economyKeywords.slice(0, 3).join(' OR ')})`;
 
-      // News API 호출 (최근 2주 필터링, 경제 관련, 최대 50개)
-      // from 파라미터를 사용하여 최근 2주 데이터만 가져오고, sortBy=relevancy로 최신/관련성 높은 뉴스 우선
-      const apiUrl = `${NEWS_API_BASE_URL}/everything?q=${encodeURIComponent(searchQuery)}&language=ko&sortBy=relevancy&from=${fromDate}&to=${toDate}&pageSize=50&apiKey=${NEWS_API_KEY}`;
-      
-      console.log(`[API 서버] News API 호출 (경제): ${apiUrl}`);
-      console.log(`[API 서버] 프록시 사용: ${PROXY_URL}`);
+      console.log(`[API 서버] MCP 서버를 통해 뉴스 검색 (경제): ${searchQuery}`);
       console.log(`[API 서버] 검색 기간: ${fromDate} ~ ${toDate} (최근 2주)`);
+
+      // MCP 서버의 뉴스 검색 함수 호출
+      const result = await searchNewsArticles(searchQuery, {
+        pageSize: 50,
+        maxPages: 1,
+        fromDate: fromDate,
+        language: 'ko',
+        sortBy: 'relevancy'
+      });
+
+      // 원본 News API 형식으로 변환
+      const data = {
+        status: result.status || 'ok',
+        totalResults: result.totalResults || result.articles.length,
+        articles: result.articles.map(article => ({
+          title: article.title,
+          description: article.description || article.summary,
+          content: article.content,
+          url: article.url,
+          urlToImage: article.urlToImage,
+          publishedAt: article.publishedAt,
+          source: {
+            name: article.source
+          },
+          author: article.author
+        }))
+      };
+
+      console.log(`[API 서버] MCP 서버 응답 (경제): ${data.articles.length}개 기사 (최근 2주)`);
+
+      // 응답 전송
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(data));
+    } catch (error) {
+      console.error('[API 서버] MCP 서버 (경제 뉴스) 오류:', error);
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: error.message }));
+    }
+  }
+  // 엔드포인트: GET /api/books/search?q=키워드&maxResults=개수
+  // 기능: Google Books API를 통해 도서 검색
+  // 인증: API 키 또는 JWT 토큰 (선택사항)
+  else if (req.url && req.url.startsWith('/api/books/search')) {
+    try {
+      // API 키 또는 JWT 토큰 인증 (선택사항 - 인증 없어도 접근 가능하지만 사용 이력 기록)
+      const auth = authenticateApiKeyOrToken(req);
+      
+      // API 키가 제공되었지만 유효하지 않은 경우
+      if (auth && auth.error) {
+        res.writeHead(401, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: auth.message }));
+        return;
+      }
+      
+      const url = new URL(req.url, `http://localhost:${PORT}`);
+      const q = url.searchParams.get('q');
+      const maxResults = parseInt(url.searchParams.get('maxResults') || '10', 10);
+
+      if (!q) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: '검색 키워드가 필요합니다.' }));
+        return;
+      }
+
+      // Google Books API 호출
+      const apiUrl = `${GOOGLE_BOOKS_API_BASE_URL}?q=${encodeURIComponent(q)}&maxResults=${Math.min(maxResults, 40)}&langRestrict=ko`;
+      
+      console.log(`[API 서버] Google Books API 호출: ${apiUrl}`);
+      console.log(`[API 서버] 프록시 사용: ${PROXY_URL}`);
       
       const response = await makeRequest(apiUrl);
       
@@ -2942,8 +2970,8 @@ const server = http.createServer(async (req, res) => {
             error: `Python 스크립트 실행 오류: ${execError.message}`,
             errorCode: execError.code,
             errorSignal: execError.signal,
-            stderr: stderr.substring(0, 2000),
-            stdout: stdout.substring(0, 1000),
+            stderr: stderr && typeof stderr === 'string' ? stderr.substring(0, 2000) : null,
+            stdout: stdout && typeof stdout === 'string' ? stdout.substring(0, 1000) : null,
             suggestion: 'Python 스크립트가 정상적으로 실행되는지 확인하세요. Python이 설치되어 있고 PATH에 등록되어 있는지 확인하세요.'
           });
         }
@@ -2951,8 +2979,8 @@ const server = http.createServer(async (req, res) => {
         const elapsedTime = ((Date.now() - startTime) / 1000).toFixed(2);
         console.log(`[API 서버] Python 스크립트 실행 완료 (소요 시간: ${elapsedTime}초)`);
         
-        console.log('[API 서버] Python 스크립트 stdout:', stdout.substring(0, 500));
-        if (stderr) {
+        console.log('[API 서버] Python 스크립트 stdout:', stdout && typeof stdout === 'string' ? stdout.substring(0, 500) : 'null');
+        if (stderr && typeof stderr === 'string') {
           console.log('[API 서버] Python 스크립트 stderr:', stderr.substring(0, 500));
         }
         
@@ -2999,8 +3027,8 @@ const server = http.createServer(async (req, res) => {
             success: false,
             error: `결과 디렉토리를 읽을 수 없습니다: ${readError.message}`,
             logsDir: logsDir,
-            stderr: stderr.substring(0, 1000),
-            stdout: stdout.substring(0, 1000)
+            stderr: stderr && typeof stderr === 'string' ? stderr.substring(0, 1000) : null,
+            stdout: stdout && typeof stdout === 'string' ? stdout.substring(0, 1000) : null
           });
         }
         
@@ -3037,8 +3065,8 @@ const server = http.createServer(async (req, res) => {
             logsDir: logsDir,
             logsDirExists: fs.existsSync(logsDir),
             currentTime: new Date(now).toISOString(),
-            stderr: stderr.substring(0, 2000),
-            stdout: stdout.substring(0, 2000)
+            stderr: stderr && typeof stderr === 'string' ? stderr.substring(0, 2000) : null,
+            stdout: stdout && typeof stdout === 'string' ? stdout.substring(0, 2000) : null
           };
           
           // 디렉토리 내 파일 목록 추가
@@ -3506,7 +3534,7 @@ const server = http.createServer(async (req, res) => {
           stdout = execError.stdout || '';
           stderr = execError.stderr || execError.message || '';
           console.error('[API 서버] Python 스크립트 실행 오류:', execError.message);
-          console.error('[API 서버] stderr:', stderr.substring(0, 1000));
+          console.error('[API 서버] stderr:', stderr && typeof stderr === 'string' ? stderr.substring(0, 1000) : 'null');
           
           // 임시 파일 삭제
           try {
@@ -3518,13 +3546,13 @@ const server = http.createServer(async (req, res) => {
           return sendJSON(res, 500, {
             success: false,
             error: `Python 스크립트 실행 오류: ${execError.message}`,
-            stderr: stderr.substring(0, 1000)
+            stderr: stderr && typeof stderr === 'string' ? stderr.substring(0, 1000) : null
           });
         }
         
         const elapsedTime = ((Date.now() - startTime) / 1000).toFixed(2);
         console.log(`[API 서버] Python 스크립트 실행 완료 (소요 시간: ${elapsedTime}초)`);
-        console.log('[API 서버] stdout:', stdout.substring(0, 500));
+        console.log('[API 서버] stdout:', stdout && typeof stdout === 'string' ? stdout.substring(0, 500) : 'null');
         
         // 임시 파일 삭제
         try {
@@ -3555,8 +3583,8 @@ const server = http.createServer(async (req, res) => {
           return sendJSON(res, 500, {
             success: false,
             error: '영향도 분석 결과 파싱 오류',
-            stdout: stdout.substring(0, 2000),
-            stderr: stderr.substring(0, 1000)
+            stdout: stdout && typeof stdout === 'string' ? stdout.substring(0, 2000) : null,
+            stderr: stderr && typeof stderr === 'string' ? stderr.substring(0, 1000) : null
           });
         }
         
@@ -3577,7 +3605,1042 @@ const server = http.createServer(async (req, res) => {
       }
     });
     return;
-  } else {
+  }
+  
+  // ============================================
+  // AI 테이블 영향도 분석 API
+  // ============================================
+  
+  // 엔드포인트: POST /api/impact/analyze
+  // 기능: 워크스페이스 전체를 스캔하여 테이블/컬럼 변경 시 영향도 분석
+  else if ((req.url === '/api/impact/analyze' || req.url.startsWith('/api/impact/analyze')) && req.method === 'POST') {
+    console.log('[API 서버] 영향도 분석 요청 수신:', req.url, req.method);
+    
+    // 요청 타임아웃 설정 (5분)
+    req.setTimeout(300000, () => {
+      if (!res.headersSent) {
+        console.error('[API 서버] 영향도 분석 요청 타임아웃 (5분 초과)');
+        res.writeHead(504, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ 
+          success: false,
+          error: '요청 타임아웃: 영향도 분석에 시간이 너무 오래 걸립니다. (5분 초과)'
+        }));
+      }
+    });
+    
+    let body = '';
+    const maxBodySize = 10 * 1024 * 1024; // 10MB 제한
+    let bodySize = 0;
+    
+    req.on('data', chunk => {
+      bodySize += chunk.length;
+      if (bodySize > maxBodySize) {
+        console.error('[API 서버] 요청 본문 크기 초과:', bodySize);
+        res.writeHead(413, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ 
+          success: false,
+          error: '요청 본문이 너무 큽니다. (10MB 초과)'
+        }));
+        return;
+      }
+      body += chunk.toString('utf-8');
+    });
+    
+    req.on('end', async () => {
+      try {
+        const requestData = JSON.parse(body);
+        const { table_name, column_name, special_notes } = requestData;
+        
+        console.log('[API 서버] 영향도 분석 요청');
+        console.log('[API 서버] 요청 데이터:', { table_name, column_name, has_special_notes: !!special_notes });
+        
+        if (!table_name) {
+          return sendJSON(res, 400, {
+            success: false,
+            error: '테이블명을 제공해야 합니다.'
+          });
+        }
+        
+        // Python 스크립트 실행을 위한 명령어 구성
+        const pythonScript = join(__dirname, 'mcp-impact-analyzer.py');
+        
+        // Python 스크립트 파일 존재 여부 확인
+        const fsCheck = await import('fs');
+        const fsForCheck = fsCheck.default || fsCheck;
+        if (!fsForCheck.existsSync(pythonScript)) {
+          console.error('[API 서버] Python 스크립트 파일을 찾을 수 없습니다:', pythonScript);
+          return sendJSON(res, 500, {
+            success: false,
+            error: `Python 스크립트 파일을 찾을 수 없습니다: ${pythonScript}`,
+            suggestion: 'mcp-impact-analyzer.py 파일이 프로젝트 루트에 있는지 확인하세요.'
+          });
+        }
+        
+        let command = `python "${pythonScript}"`;
+        command += ` --table "${table_name}"`;
+        if (column_name) {
+          command += ` --column "${column_name}"`;
+        }
+        if (special_notes) {
+          command += ` --notes "${special_notes.replace(/"/g, '\\"')}"`;
+        }
+        
+        console.log('[API 서버] 실행 명령어:', command);
+        console.log('[API 서버] 영향도 분석 시작');
+        
+        const startTime = Date.now();
+        let stdout, stderr;
+        
+        try {
+          // Windows에서 UTF-8 인코딩 보장
+          const env = process.platform === 'win32' 
+            ? { ...process.env, PYTHONIOENCODING: 'utf-8', PYTHONLEGACYWINDOWSSTDIO: '0' }
+            : process.env;
+          
+          const result = await execAsync(command, {
+            cwd: __dirname,
+            maxBuffer: 50 * 1024 * 1024, // 50MB
+            timeout: 300000, // 5분
+            env: env,
+            encoding: 'utf-8' // 명시적으로 UTF-8 인코딩 지정
+          });
+          stdout = result.stdout;
+          stderr = result.stderr;
+        } catch (execError) {
+          console.error('[API 서버] Python 스크립트 실행 오류:', execError);
+          stderr = execError.stderr || execError.message;
+          stdout = execError.stdout || '';
+          
+          // 실행 오류가 발생했어도 stdout에 JSON이 있을 수 있음
+          if (!stdout || !stdout.trim()) {
+            return sendJSON(res, 500, {
+              success: false,
+              error: `Python 스크립트 실행 실패: ${execError.message}`,
+              details: execError.message,
+              stdout: stdout ? stdout.substring(0, 500) : null,
+              stderr: stderr ? stderr.substring(0, 500) : null
+            });
+          }
+        }
+        
+        const endTime = Date.now();
+        const duration = ((endTime - startTime) / 1000).toFixed(2);
+        
+        console.log(`[API 서버] 영향도 분석 완료 (소요 시간: ${duration}초)`);
+        
+        if (stderr && stderr.trim()) {
+          console.error('[API 서버] Python 스크립트 stderr:', stderr);
+        }
+        
+        // JSON 결과 파싱 시도
+        let analysisResult;
+        try {
+          // stdout에서 JSON 부분 추출 시도
+          const jsonMatch = stdout.match(/\{[\s\S]*\}/);
+          if (jsonMatch) {
+            analysisResult = JSON.parse(jsonMatch[0]);
+            
+            // JSON에 error가 있으면 에러로 처리
+            if (analysisResult.error) {
+              return sendJSON(res, 500, {
+                success: false,
+                error: analysisResult.error || '영향도 분석 중 오류가 발생했습니다.',
+                error_type: analysisResult.error_type || 'UnknownError',
+                stdout: stdout && typeof stdout === 'string' ? stdout.substring(0, 500) : null,
+                stderr: stderr && typeof stderr === 'string' ? stderr.substring(0, 500) : null
+              });
+            }
+          } else {
+            throw new Error('JSON 결과를 찾을 수 없습니다.');
+          }
+        } catch (parseError) {
+          console.error('[API 서버] JSON 파싱 오류:', parseError.message);
+          console.error('[API 서버] stdout (처음 1000자):', stdout ? stdout.substring(0, 1000) : 'null');
+          
+          return sendJSON(res, 500, {
+            success: false,
+            error: '영향도 분석 결과를 파싱할 수 없습니다.',
+            details: parseError.message,
+            stdout: stdout && typeof stdout === 'string' ? stdout.substring(0, 500) : null,
+            stderr: stderr && typeof stderr === 'string' ? stderr.substring(0, 500) : null
+          });
+        }
+        
+        return sendJSON(res, 200, {
+          success: true,
+          result: analysisResult,
+          duration: `${duration}초`
+        });
+      } catch (error) {
+        console.error('[API 서버] 영향도 분석 처리 오류:', error);
+        return sendJSON(res, 500, {
+          success: false,
+          error: `영향도 분석 중 오류가 발생했습니다: ${error.message}`
+        });
+      }
+    });
+    
+    req.on('error', (error) => {
+      console.error('[API 서버] 요청 처리 중 오류:', error);
+      if (!res.headersSent) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ 
+          success: false,
+          error: `요청 처리 중 오류가 발생했습니다: ${error.message}`
+        }));
+      }
+    });
+    return;
+  } else if (req.method === 'POST' && req.url === '/api/error-log/analyze') {
+    // 에러 로그 분석 API
+    console.log('[API 서버] 에러 로그 분석 요청 수신');
+    
+    // CORS 헤더 설정
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    
+    if (req.method === 'OPTIONS') {
+      res.writeHead(200);
+      res.end();
+      return;
+    }
+    
+    let body = '';
+    const maxBodySize = 10 * 1024 * 1024; // 10MB 제한
+    let bodySize = 0;
+    
+    req.on('data', chunk => {
+      bodySize += chunk.length;
+      if (bodySize > maxBodySize) {
+        console.error('[API 서버] 요청 본문 크기 초과:', bodySize);
+        res.writeHead(413, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ 
+          success: false,
+          error: '요청 본문이 너무 큽니다. (10MB 초과)'
+        }));
+        return;
+      }
+      body += chunk.toString('utf-8');
+    });
+    
+    req.on('end', async () => {
+      try {
+        const requestData = JSON.parse(body);
+        const { log_file_path, log_content, workspace_path } = requestData;
+        
+        console.log('[API 서버] 에러 로그 분석 요청');
+        console.log('[API 서버] 요청 데이터:', { log_file_path, has_log_content: !!log_content, workspace_path });
+        
+        // Python 스크립트 실행을 위한 명령어 구성
+        const pythonScript = join(__dirname, 'mcp-error-log-analyzer.py');
+        
+        // Python 스크립트 파일 존재 여부 확인
+        const fsCheck = await import('fs');
+        const fsForCheck = fsCheck.default || fsCheck;
+        if (!fsForCheck.existsSync(pythonScript)) {
+          console.error('[API 서버] Python 스크립트 파일을 찾을 수 없습니다:', pythonScript);
+          return sendJSON(res, 500, {
+            success: false,
+            error: `Python 스크립트 파일을 찾을 수 없습니다: ${pythonScript}`,
+            suggestion: 'mcp-error-log-analyzer.py 파일이 프로젝트 루트에 있는지 확인하세요.'
+          });
+        }
+        
+        let command = `python "${pythonScript}"`;
+        if (log_content) {
+          // 직접 입력된 로그는 임시 파일에 저장
+          const tempFile = join(__dirname, 'temp_error_log.txt');
+          const fsCheck = await import('fs');
+          const fsForCheck = fsCheck.default || fsCheck;
+          fsForCheck.writeFileSync(tempFile, log_content, 'utf-8');
+          command += ` --log-file "${tempFile}"`;
+        } else if (log_file_path) {
+          command += ` --log-file "${log_file_path}"`;
+        }
+        if (workspace_path) {
+          command += ` --workspace "${workspace_path}"`;
+        }
+        
+        console.log('[API 서버] 실행 명령어:', command);
+        console.log('[API 서버] 에러 로그 분석 시작');
+        
+        const startTime = Date.now();
+        let stdout, stderr;
+        
+        try {
+          // Windows에서 UTF-8 인코딩 보장
+          const env = process.platform === 'win32' 
+            ? { ...process.env, PYTHONIOENCODING: 'utf-8', PYTHONLEGACYWINDOWSSTDIO: '0' }
+            : process.env;
+          
+          const result = await execAsync(command, {
+            cwd: __dirname,
+            maxBuffer: 50 * 1024 * 1024, // 50MB
+            timeout: 300000, // 5분
+            env: env,
+            encoding: 'utf-8' // 명시적으로 UTF-8 인코딩 지정
+          });
+          stdout = result.stdout;
+          stderr = result.stderr;
+        } catch (execError) {
+          console.error('[API 서버] Python 스크립트 실행 오류:', execError);
+          stderr = execError.stderr || execError.message;
+          stdout = execError.stdout || '';
+          
+          // 실행 오류가 발생했어도 stdout에 결과가 있을 수 있음
+          if (!stdout || !stdout.trim()) {
+            return sendJSON(res, 500, {
+              success: false,
+              error: `Python 스크립트 실행 실패: ${execError.message}`,
+              details: execError.message,
+              stdout: stdout ? stdout.substring(0, 500) : null,
+              stderr: stderr ? stderr.substring(0, 500) : null
+            });
+          }
+        }
+        
+        const endTime = Date.now();
+        const duration = ((endTime - startTime) / 1000).toFixed(2);
+        
+        console.log(`[API 서버] 에러 로그 분석 완료 (소요 시간: ${duration}초)`);
+        
+        if (stderr && stderr.trim()) {
+          console.error('[API 서버] Python 스크립트 stderr:', stderr);
+        }
+        
+        // 결과 반환 (텍스트 형태로 반환)
+        return sendJSON(res, 200, {
+          success: true,
+          result: stdout || '분석 결과가 없습니다.',
+          duration: `${duration}초`
+        });
+      } catch (error) {
+        console.error('[API 서버] 에러 로그 분석 처리 오류:', error);
+        return sendJSON(res, 500, {
+          success: false,
+          error: `에러 로그 분석 중 오류가 발생했습니다: ${error.message}`
+        });
+      }
+    });
+    
+    req.on('error', (error) => {
+      console.error('[API 서버] 요청 처리 중 오류:', error);
+      if (!res.headersSent) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ 
+          success: false,
+          error: `요청 처리 중 오류가 발생했습니다: ${error.message}`
+        }));
+      }
+    });
+    return;
+  } else if (req.method === 'POST' && req.url === '/api/error-log/save') {
+    // 에러 로그 저장 API
+    console.log('[API 서버] 에러 로그 저장 요청 수신');
+    
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    
+    if (req.method === 'OPTIONS') {
+      res.writeHead(200);
+      res.end();
+      return;
+    }
+    
+    let body = '';
+    req.on('data', chunk => {
+      body += chunk.toString('utf-8');
+    });
+    
+    req.on('end', async () => {
+      try {
+        const requestData = JSON.parse(body);
+        const { log_content, log_type, parsed_data, metadata } = requestData;
+        
+        if (!log_content) {
+          return sendJSON(res, 400, {
+            success: false,
+            error: 'log_content는 필수입니다.'
+          });
+        }
+        
+        // parsed_data 또는 metadata에서 메타데이터 추출
+        let finalParsedData = parsed_data || metadata || null;
+        let errors = [];
+        
+        // parsed_data가 없고 log_content만 있는 경우, 자동 분석 수행
+        if (!finalParsedData && log_content) {
+          try {
+            const pythonScript = join(__dirname, 'mcp-error-log-analyzer.py');
+            const workspace = __dirname;
+            
+            // 임시 파일에 로그 내용 저장
+            const tempFile = join(__dirname, 'temp_error_log_auto.txt');
+            const fsCheck = await import('fs');
+            const fsForCheck = fsCheck.default || fsCheck;
+            fsForCheck.writeFileSync(tempFile, log_content, 'utf-8');
+            
+            // Python 스크립트 실행하여 분석 (stderr도 함께 받기)
+            const { stdout, stderr } = await execAsync(
+              `python "${pythonScript}" --log-file "${tempFile}" --workspace "${workspace}"`
+            ).catch(() => ({ stdout: '', stderr: '' }));
+            
+            // stderr도 stdout과 합쳐서 검색
+            const combinedOutput = stdout + '\n' + stderr;
+            
+            // 임시 파일 삭제
+            try {
+              fsForCheck.unlinkSync(tempFile);
+            } catch (e) {
+              // 무시
+            }
+            
+            // Python 스크립트의 출력에서 JSON 결과 추출
+            try {
+              // 출력에서 JSON 추출 (<JSON_START>...<JSON_END> 형식)
+              const jsonMatch = combinedOutput.match(/<JSON_START>([\s\S]*?)<JSON_END>/);
+              if (jsonMatch) {
+                const jsonData = JSON.parse(jsonMatch[1]);
+                if (jsonData.errors && Array.isArray(jsonData.errors)) {
+                  for (const errorData of jsonData.errors) {
+                    errors.push({
+                      log_content: errorData.log_content || log_content,
+                      timestamp: errorData.timestamp || new Date().toISOString(),
+                      parsed_data: errorData.parsed_data || null,
+                      log_type: errorData.log_type || log_type || null
+                    });
+                  }
+                }
+              } else {
+                // JSON이 없으면 로그를 타임스탬프별로 파싱하여 분리
+                const logLines = log_content.split('\n');
+                let currentError = null;
+                let currentErrorLines = [];
+                
+                for (const line of logLines) {
+                  // 타임스탬프 패턴 감지 (ISO 8601 또는 일반 형식)
+                  const timestampMatch = line.match(/(\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}[.\d]*Z?)/);
+                  if (timestampMatch && (line.includes('ERROR') || line.includes('CRITICAL') || line.includes('WARNING'))) {
+                    // 이전 에러 저장
+                    if (currentError && currentErrorLines.length > 0) {
+                      errors.push({
+                        log_content: currentErrorLines.join('\n'),
+                        timestamp: currentError.timestamp,
+                        parsed_data: currentError.parsed_data
+                      });
+                    }
+                    // 새 에러 시작
+                    currentError = {
+                      timestamp: timestampMatch[1],
+                      parsed_data: {
+                        timestamp: timestampMatch[1],
+                        severity: line.includes('CRITICAL') ? 'CRITICAL' : line.includes('ERROR') ? 'ERROR' : 'WARNING'
+                      }
+                    };
+                    currentErrorLines = [line];
+                  } else if (currentError) {
+                    currentErrorLines.push(line);
+                    // 빈 줄이 두 번 연속 나오면 에러 종료
+                    if (line.trim() === '' && currentErrorLines[currentErrorLines.length - 2]?.trim() === '') {
+                      errors.push({
+                        log_content: currentErrorLines.join('\n'),
+                        timestamp: currentError.timestamp,
+                        parsed_data: currentError.parsed_data
+                      });
+                      currentError = null;
+                      currentErrorLines = [];
+                    }
+                  }
+                }
+                
+                // 마지막 에러 저장
+                if (currentError && currentErrorLines.length > 0) {
+                  errors.push({
+                    log_content: currentErrorLines.join('\n'),
+                    timestamp: currentError.timestamp,
+                    parsed_data: currentError.parsed_data
+                  });
+                }
+                
+                // 에러가 없으면 전체를 하나로 저장
+                if (errors.length === 0) {
+                  errors.push({
+                    log_content: log_content,
+                    timestamp: new Date().toISOString(),
+                    parsed_data: null
+                  });
+                }
+              }
+            } catch (parseError) {
+              console.log('[API 서버] JSON 파싱 실패, 전체를 하나로 저장:', parseError.message);
+              errors.push({
+                log_content: log_content,
+                timestamp: new Date().toISOString(),
+                parsed_data: finalParsedData
+              });
+            }
+          } catch (e) {
+            // 자동 분석 실패 시 전체를 하나로 저장
+            console.log('[API 서버] 자동 분석 실패, 원본 데이터만 저장:', e.message);
+            errors.push({
+              log_content: log_content,
+              timestamp: new Date().toISOString(),
+              parsed_data: finalParsedData
+            });
+          }
+        } else {
+          // parsed_data가 있는 경우, 전체를 하나로 저장하거나 parsed_data에서 에러 목록 추출 시도
+          if (finalParsedData && Array.isArray(finalParsedData.errors)) {
+            // parsed_data에 errors 배열이 있는 경우 각각 저장
+            for (const error of finalParsedData.errors) {
+              errors.push({
+                log_content: error.log_content || log_content,
+                timestamp: error.timestamp || finalParsedData.timestamp || new Date().toISOString(),
+                parsed_data: error.metadata || error
+              });
+            }
+          } else {
+            // 그 외의 경우 전체를 하나로 저장
+            errors.push({
+              log_content: log_content,
+              timestamp: finalParsedData?.timestamp || new Date().toISOString(),
+              parsed_data: finalParsedData
+            });
+          }
+        }
+        
+        // 각 에러를 별도의 row로 저장
+        const savedLogs = [];
+        for (const errorData of errors) {
+          const savedLog = errorLogsDB.create({
+            log_content: errorData.log_content,
+            log_type: log_type || null,
+            parsed_data: errorData.parsed_data,
+            timestamp: errorData.timestamp
+          });
+          savedLogs.push(savedLog);
+        }
+        
+        return sendJSON(res, 200, {
+          success: true,
+          result: savedLogs.length === 1 ? savedLogs[0] : savedLogs,
+          count: savedLogs.length
+        });
+      } catch (error) {
+        console.error('[API 서버] 에러 로그 저장 처리 오류:', error);
+        return sendJSON(res, 500, {
+          success: false,
+          error: `에러 로그 저장 중 오류가 발생했습니다: ${error.message}`
+        });
+      }
+    });
+    return;
+  } else if (req.method === 'GET' && req.url.startsWith('/api/error-log/history')) {
+    // 에러 로그 이력 조회 API (필터링, 정렬, 검색 지원)
+    console.log('[API 서버] 에러 로그 이력 조회 요청 수신');
+    
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    
+    try {
+      const url = new URL(req.url, `http://${req.headers.host}`);
+      const limit = parseInt(url.searchParams.get('limit') || '100', 10);
+      const filters = {
+        system_type: url.searchParams.get('system_type') || null,
+        severity: url.searchParams.get('severity') || null,
+        error_type: url.searchParams.get('error_type') || null,
+        start_date: url.searchParams.get('start_date') || null,
+        end_date: url.searchParams.get('end_date') || null
+      };
+      
+      // 빈 필터 제거
+      Object.keys(filters).forEach(key => {
+        if (!filters[key]) delete filters[key];
+      });
+      
+      const logs = errorLogsDB.findAll(limit, filters);
+      
+      return sendJSON(res, 200, {
+        success: true,
+        result: logs,
+        count: logs.length,
+        filters: filters
+      });
+    } catch (error) {
+      console.error('[API 서버] 에러 로그 이력 조회 처리 오류:', error);
+      return sendJSON(res, 500, {
+        success: false,
+        error: `에러 로그 이력 조회 중 오류가 발생했습니다: ${error.message}`
+      });
+    }
+  } else if (req.method === 'POST' && req.url === '/api/error-log/analyze') {
+    // 에러 로그 분석 및 메타데이터 추출 API
+    console.log('[API 서버] 에러 로그 분석 요청 수신');
+    
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    
+    if (req.method === 'OPTIONS') {
+      res.writeHead(200);
+      res.end();
+      return;
+    }
+    
+    let body = '';
+    req.on('data', chunk => {
+      body += chunk.toString('utf-8');
+    });
+    
+    req.on('end', async () => {
+      try {
+        const requestData = JSON.parse(body);
+        const { log_content, log_file_path, workspace_path } = requestData;
+        
+        if (!log_content && !log_file_path) {
+          return sendJSON(res, 400, {
+            success: false,
+            error: 'log_content 또는 log_file_path 중 하나는 필수입니다.'
+          });
+        }
+        
+        // 로그 내용 가져오기
+        let logContent = log_content;
+        if (!logContent && log_file_path) {
+          const fsCheck = await import('fs');
+          const fsForCheck = fsCheck.default || fsCheck;
+          if (fsForCheck.existsSync(log_file_path)) {
+            logContent = fsForCheck.readFileSync(log_file_path, 'utf-8');
+          } else {
+            return sendJSON(res, 404, {
+              success: false,
+              error: '로그 파일을 찾을 수 없습니다.'
+            });
+          }
+        }
+        
+        // Python 스크립트를 통해 로그 분석 수행
+        const pythonScript = join(__dirname, 'mcp-error-log-analyzer.py');
+        const workspace = workspace_path || __dirname;
+        
+        // 임시 파일에 로그 내용 저장
+        const tempFile = join(__dirname, 'temp_error_log.txt');
+        const fsCheck = await import('fs');
+        const fsForCheck = fsCheck.default || fsCheck;
+        fsForCheck.writeFileSync(tempFile, logContent, 'utf-8');
+        
+        // Python 스크립트 실행
+        const { stdout, stderr } = await execAsync(
+          `python "${pythonScript}" --log-file "${tempFile}" --workspace "${workspace}"`
+        );
+        
+        // 임시 파일 삭제
+        try {
+          fsForCheck.unlinkSync(tempFile);
+        } catch (e) {
+          // 무시
+        }
+        
+        if (stderr && !stdout) {
+          return sendJSON(res, 500, {
+            success: false,
+            error: `로그 분석 중 오류가 발생했습니다: ${stderr}`
+          });
+        }
+        
+        // 분석 결과 파싱 (JSON 형식으로 반환되도록 수정 필요)
+        // 현재는 텍스트 형식으로 반환되므로, Python 스크립트를 수정하거나
+        // 여기서 파싱 로직을 추가해야 함
+        // 임시로 간단한 파싱 수행
+        const analysisResult = {
+          log_content: logContent,
+          analysis: stdout || '분석 완료',
+          errors: []
+        };
+        
+        // Python 스크립트가 JSON을 반환하도록 수정되어 있다고 가정
+        try {
+          const jsonMatch = stdout.match(/\{[\s\S]*\}/);
+          if (jsonMatch) {
+            analysisResult.errors = JSON.parse(jsonMatch[0]);
+          }
+        } catch (e) {
+          // JSON 파싱 실패 시 텍스트 그대로 사용
+        }
+        
+        return sendJSON(res, 200, {
+          success: true,
+          result: analysisResult
+        });
+      } catch (error) {
+        console.error('[API 서버] 에러 로그 분석 처리 오류:', error);
+        return sendJSON(res, 500, {
+          success: false,
+          error: `에러 로그 분석 중 오류가 발생했습니다: ${error.message}`
+        });
+      }
+    });
+    return;
+  } else if (req.method === 'POST' && req.url === '/api/error-log/find-location') {
+    // 워크스페이스 검색 API
+    console.log('[API 서버] 워크스페이스 검색 요청 수신');
+    
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    
+    if (req.method === 'OPTIONS') {
+      res.writeHead(200);
+      res.end();
+      return;
+    }
+    
+    let body = '';
+    req.on('data', chunk => {
+      body += chunk.toString('utf-8');
+    });
+    
+    req.on('end', async () => {
+      try {
+        const requestData = JSON.parse(body);
+        const { error_message, workspace_path } = requestData;
+        
+        if (!error_message) {
+          return sendJSON(res, 400, {
+            success: false,
+            error: 'error_message는 필수입니다.'
+          });
+        }
+        
+        // Python 스크립트를 통해 워크스페이스 검색 수행
+        const pythonScript = join(__dirname, 'mcp-error-log-analyzer.py');
+        const workspace = workspace_path || __dirname;
+        
+        // 임시 파일에 에러 메시지 저장
+        const tempFile = join(__dirname, 'temp_error.txt');
+        const fsCheck = await import('fs');
+        const fsForCheck = fsCheck.default || fsCheck;
+        fsForCheck.writeFileSync(tempFile, error_message, 'utf-8');
+        
+        // Python에서 WorkspaceSearcher 클래스를 직접 호출하는 것은 어려우므로
+        // 간단한 검색 스크립트를 만들거나, analyze_error_logs를 활용
+        // 여기서는 간단하게 파일명/함수명 패턴을 추출하여 반환
+        
+        const filePatterns = [
+          /([/\w\\]+\.(py|js|jsx|ts|tsx|vue|java|cpp|c|go|rs|php|rb|swift))(?::(\d+))?/gi,
+          /File\s+["']([^"']+)["']/gi,
+          /at\s+([/\w\\]+\.(py|js|jsx|ts|tsx|vue))/gi,
+        ];
+        
+        const foundFiles = [];
+        const foundFunctions = [];
+        
+        for (const pattern of filePatterns) {
+          let match;
+          while ((match = pattern.exec(error_message)) !== null) {
+            const filePath = match[1];
+            const lineNum = match[3];
+            foundFiles.push({ path: filePath, line: lineNum ? parseInt(lineNum) : null });
+          }
+        }
+        
+        // 함수명 추출
+        const functionPatterns = [
+          /function\s+(\w+)/gi,
+          /def\s+(\w+)/gi,
+          /class\s+(\w+)/gi,
+          /(\w+)\s*\([^)]*\)\s*\{/gi,
+          /(\w+)\s*\([^)]*\)\s*:/gi,
+        ];
+        
+        for (const pattern of functionPatterns) {
+          let match;
+          while ((match = pattern.exec(error_message)) !== null) {
+            foundFunctions.push(match[1]);
+          }
+        }
+        
+        // 임시 파일 삭제
+        try {
+          fsForCheck.unlinkSync(tempFile);
+        } catch (e) {
+          // 무시
+        }
+        
+        return sendJSON(res, 200, {
+          success: true,
+          result: {
+            files: foundFiles,
+            functions: [...new Set(foundFunctions)]
+          }
+        });
+      } catch (error) {
+        console.error('[API 서버] 워크스페이스 검색 처리 오류:', error);
+        return sendJSON(res, 500, {
+          success: false,
+          error: `워크스페이스 검색 중 오류가 발생했습니다: ${error.message}`
+        });
+      }
+    });
+    return;
+  }
+  
+  // ============================================
+  // VOC 관련 API 엔드포인트
+  // ============================================
+  
+  // SR 등록: POST /api/voc/sr
+  else if (req.url === '/api/voc/sr' && req.method === 'POST') {
+    let body = '';
+    req.on('data', chunk => {
+      body += chunk.toString('utf-8');
+    });
+    
+    req.on('end', async () => {
+      try {
+        const requestData = JSON.parse(body);
+        const { title, description, confluence_url, priority, category, tags } = requestData;
+        
+        if (!title) {
+          return sendJSON(res, 400, {
+            success: false,
+            error: '제목은 필수입니다.'
+          });
+        }
+        
+        // 사용자 인증 확인 (선택사항)
+        const userId = req.userId || null;
+        
+        // SR 생성
+        const srData = {
+          userId,
+          title,
+          description: description || '',
+          confluence_url: confluence_url || null,
+          confluence_key: null,
+          confluence_page_id: null,
+          confluence_content: null,
+          source_type: confluence_url ? 'confluence' : 'manual',
+          status: 'open',
+          priority: priority || 'medium',
+          category: category || null,
+          tags: tags || []
+        };
+        
+        // Confluence URL이 있으면 페이지 정보 가져오기 (MCP 서버 호출)
+        if (confluence_url) {
+          try {
+            const pythonScript = join(__dirname, 'mcp-voc-server.py');
+            const result = await execAsync(`python "${pythonScript}" --get-confluence-page "${confluence_url}"`);
+            // MCP 서버는 stdio 통신이므로 직접 호출 대신 API 서버에서 처리
+            // 여기서는 간단하게 URL에서 키 추출
+            const urlMatch = confluence_url.match(/pageId=(\d+)/);
+            if (urlMatch) {
+              srData.confluence_key = urlMatch[1];
+              srData.confluence_page_id = urlMatch[1];
+            }
+          } catch (e) {
+            console.warn('[API 서버] Confluence 페이지 정보 가져오기 실패:', e.message);
+          }
+        }
+        
+        const newSr = srRequestsDB.create(srData);
+        
+        return sendJSON(res, 201, {
+          success: true,
+          message: 'SR이 성공적으로 등록되었습니다.',
+          sr: newSr
+        });
+      } catch (error) {
+        console.error('[API 서버] SR 등록 오류:', error);
+        return sendJSON(res, 500, {
+          success: false,
+          error: `SR 등록 중 오류가 발생했습니다: ${error.message}`
+        });
+      }
+    });
+    return;
+  }
+  
+  // SR 목록 조회: GET /api/voc/sr
+  else if (req.url && req.url.startsWith('/api/voc/sr') && req.method === 'GET' && !req.url.startsWith('/api/voc/sr/')) {
+    try {
+      const urlObj = new URL(req.url, `http://${req.headers.host || 'localhost:3001'}`);
+      const status = urlObj.searchParams.get('status');
+      const priority = urlObj.searchParams.get('priority');
+      const limit = parseInt(urlObj.searchParams.get('limit') || '50');
+      
+      const filters = {};
+      if (status) filters.status = status;
+      if (priority) filters.priority = priority;
+      
+      const srList = srRequestsDB.findAll(limit, filters);
+      
+      return sendJSON(res, 200, {
+        success: true,
+        count: srList.length,
+        sr_list: srList
+      });
+    } catch (error) {
+      console.error('[API 서버] SR 목록 조회 오류:', error);
+      return sendJSON(res, 500, {
+        success: false,
+        error: `SR 목록 조회 중 오류가 발생했습니다: ${error.message}`
+      });
+    }
+  }
+  
+  // SR 상세 조회: GET /api/voc/sr/:id
+  else if (req.url && req.url.startsWith('/api/voc/sr/') && req.method === 'GET') {
+    try {
+      const srId = parseInt(req.url.split('/api/voc/sr/')[1]);
+      
+      if (isNaN(srId)) {
+        return sendJSON(res, 400, {
+          success: false,
+          error: '유효하지 않은 SR ID입니다.'
+        });
+      }
+      
+      const sr = srRequestsDB.findById(srId);
+      
+      if (!sr) {
+        return sendJSON(res, 404, {
+          success: false,
+          error: 'SR을 찾을 수 없습니다.'
+        });
+      }
+      
+      // SR 이력도 함께 조회
+      const history = srHistoryDB.findBySrRequestId(srId);
+      
+      return sendJSON(res, 200, {
+        success: true,
+        sr: {
+          ...sr,
+          history
+        }
+      });
+    } catch (error) {
+      console.error('[API 서버] SR 상세 조회 오류:', error);
+      return sendJSON(res, 500, {
+        success: false,
+        error: `SR 상세 조회 중 오류가 발생했습니다: ${error.message}`
+      });
+    }
+  }
+  
+  // Confluence 검색: POST /api/voc/confluence/search
+  else if (req.url === '/api/voc/confluence/search' && req.method === 'POST') {
+    let body = '';
+    req.on('data', chunk => {
+      body += chunk.toString('utf-8');
+    });
+    
+    req.on('end', async () => {
+      try {
+        const requestData = JSON.parse(body);
+        const { query, limit } = requestData;
+        
+        if (!query) {
+          return sendJSON(res, 400, {
+            success: false,
+            error: '검색어는 필수입니다.'
+          });
+        }
+        
+        // MCP 서버를 통해 Confluence 검색 (여기서는 간단하게 구현)
+        // 실제로는 mcp-voc-server.py의 ConfluenceClient 사용
+        return sendJSON(res, 200, {
+          success: true,
+          message: 'Confluence 검색 기능은 MCP 서버를 통해 제공됩니다.',
+          query,
+          limit: limit || 10
+        });
+      } catch (error) {
+        console.error('[API 서버] Confluence 검색 오류:', error);
+        return sendJSON(res, 500, {
+          success: false,
+          error: `Confluence 검색 중 오류가 발생했습니다: ${error.message}`
+        });
+      }
+    });
+    return;
+  }
+  
+  // Git 기반 유사 SR 검색: GET /api/voc/git/search
+  else if (req.url && req.url.startsWith('/api/voc/git/search') && req.method === 'GET') {
+    try {
+      const urlObj = new URL(req.url, `http://${req.headers.host || 'localhost:3001'}`);
+      const keywordsParam = urlObj.searchParams.get('keywords');
+      const limit = parseInt(urlObj.searchParams.get('limit') || '10');
+      
+      if (!keywordsParam) {
+        return sendJSON(res, 400, {
+          success: false,
+          error: '키워드는 필수입니다.'
+        });
+      }
+      
+      const keywords = keywordsParam.split(',').map(k => k.trim()).filter(k => k);
+      
+      // Git 저장소에서 커밋 검색
+      const commits = gitCommitsDB.findSimilar(keywords, limit);
+      
+      return sendJSON(res, 200, {
+        success: true,
+        keywords,
+        commits_found: commits.length,
+        commits
+      });
+    } catch (error) {
+      console.error('[API 서버] Git 유사 SR 검색 오류:', error);
+      return sendJSON(res, 500, {
+        success: false,
+        error: `Git 유사 SR 검색 중 오류가 발생했습니다: ${error.message}`
+      });
+    }
+  }
+  
+  // DB 변경 분석: POST /api/voc/db/analyze
+  else if (req.url === '/api/voc/db/analyze' && req.method === 'POST') {
+    let body = '';
+    req.on('data', chunk => {
+      body += chunk.toString('utf-8');
+    });
+    
+    req.on('end', async () => {
+      try {
+        const requestData = JSON.parse(body);
+        const { sql_query } = requestData;
+        
+        if (!sql_query) {
+          return sendJSON(res, 400, {
+            success: false,
+            error: 'SQL 쿼리는 필수입니다.'
+          });
+        }
+        
+        // MCP 서버를 통해 DB 변경 분석 (여기서는 간단하게 구현)
+        // 실제로는 mcp-voc-server.py의 DatabaseChangeAnalyzer 사용
+        return sendJSON(res, 200, {
+          success: true,
+          message: 'DB 변경 분석 기능은 MCP 서버를 통해 제공됩니다.',
+          sql_query
+        });
+      } catch (error) {
+        console.error('[API 서버] DB 변경 분석 오류:', error);
+        return sendJSON(res, 500, {
+          success: false,
+          error: `DB 변경 분석 중 오류가 발생했습니다: ${error.message}`
+        });
+      }
+    });
+    return;
+  }
+  
+  else {
     // 알 수 없는 경로에 대한 404 응답
     console.log('[API 서버] 404 Not Found:', req.method, req.url);
     res.writeHead(404, { 'Content-Type': 'application/json' });

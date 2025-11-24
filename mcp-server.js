@@ -287,6 +287,139 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
   };
 });
 
+// ============================================
+// 뉴스 검색 함수 (모듈로 export 가능)
+// ============================================
+
+/**
+ * 뉴스 검색 함수 (MCP 서버 및 API 서버에서 공통 사용)
+ * @param {string} keyword - 검색 키워드
+ * @param {object} options - 옵션 (pageSize, fromDate 등)
+ * @returns {Promise<object>} 뉴스 검색 결과
+ */
+export async function searchNewsArticles(keyword, options = {}) {
+  const {
+    pageSize = 10,
+    fromDate = null,
+    maxPages = 1,
+    language = 'ko',
+    sortBy = 'publishedAt'
+  } = options;
+
+  // 입력값 검증
+  if (!keyword || keyword.trim() === '') {
+    throw new Error('검색 키워드를 입력해주세요.');
+  }
+
+  try {
+    // News API를 사용하여 실제 뉴스 검색
+    const searchKeyword = encodeURIComponent(keyword.trim());
+    let allArticles = [];
+    
+    // 여러 페이지를 가져와서 합치기
+    for (let page = 1; page <= maxPages; page++) {
+      let apiUrl = `${NEWS_API_BASE_URL}/everything?q=${searchKeyword}&language=${language}&sortBy=${sortBy}&pageSize=${pageSize}&page=${page}&apiKey=${NEWS_API_KEY}`;
+      
+      if (fromDate) {
+        apiUrl += `&from=${fromDate}`;
+      }
+      
+      if (page === 1) {
+        console.error(`[MCP 서버] News API 호출: ${apiUrl}`);
+      }
+      
+      const response = await fetchWithProxy(apiUrl);
+      
+      if (!response.ok) {
+        if (page === 1) {
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(`News API 오류: ${response.status} - ${errorData.message || response.statusText}`);
+        }
+        break; // 첫 페이지가 아니면 중단
+      }
+
+      const data = await response.json();
+
+      if (!data.articles || data.articles.length === 0) {
+        break; // 더 이상 기사가 없으면 중단
+      }
+
+      // 일주일 이상 지난 기사 필터링 (추가 안전장치)
+      if (fromDate) {
+        const oneWeekAgo = new Date(fromDate);
+        const filteredArticles = data.articles.filter(article => {
+          if (!article.publishedAt) return false;
+          const publishedDate = new Date(article.publishedAt);
+          return publishedDate >= oneWeekAgo;
+        });
+        allArticles = allArticles.concat(filteredArticles);
+      } else {
+        allArticles = allArticles.concat(data.articles);
+      }
+
+      // 페이지당 기사 수가 pageSize보다 적으면 마지막 페이지
+      if (data.articles.length < pageSize) {
+        break;
+      }
+    }
+
+    // 중복 제거 (URL 기준)
+    const uniqueArticles = [];
+    const seenUrls = new Set();
+    for (const article of allArticles) {
+      if (article.url && !seenUrls.has(article.url)) {
+        seenUrls.add(article.url);
+        uniqueArticles.push(article);
+      }
+    }
+
+    // 결과가 없는 경우
+    if (uniqueArticles.length === 0) {
+      return {
+        articles: [],
+        totalResults: 0,
+        status: 'ok'
+      };
+    }
+
+    // 기사 데이터 포맷팅
+    const formattedArticles = uniqueArticles
+      .filter(article => article.title && article.title !== '[Removed]')
+      .map(article => {
+        const publishedDate = article.publishedAt 
+          ? new Date(article.publishedAt).toLocaleDateString('ko-KR', {
+              year: 'numeric',
+              month: 'long',
+              day: 'numeric'
+            })
+          : '날짜 정보 없음';
+
+        return {
+          title: article.title || '제목 없음',
+          summary: article.description || article.content?.substring(0, 200) || '요약 정보 없음',
+          date: publishedDate,
+          source: article.source?.name || '출처 정보 없음',
+          category: '뉴스',
+          url: article.url || '#',
+          publishedAt: article.publishedAt,
+          description: article.description,
+          content: article.content,
+          author: article.author,
+          urlToImage: article.urlToImage
+        };
+      });
+
+    return {
+      articles: formattedArticles,
+      totalResults: formattedArticles.length,
+      status: 'ok'
+    };
+  } catch (error) {
+    console.error('News API 오류:', error);
+    throw error;
+  }
+}
+
 // 서버가 도구 실행을 요청받았을 때
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
   const { name, arguments: args } = request.params;
@@ -308,22 +441,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     }
 
     try {
-      // News API를 사용하여 실제 뉴스 검색
-      const searchKeyword = encodeURIComponent(keyword.trim());
-      const apiUrl = `${NEWS_API_BASE_URL}/everything?q=${searchKeyword}&language=ko&sortBy=publishedAt&pageSize=10&apiKey=${NEWS_API_KEY}`;
-      
-      console.error(`[MCP 서버] News API 호출: ${apiUrl}`);
-      const response = await fetchWithProxy(apiUrl);
-      
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(`News API 오류: ${response.status} - ${errorData.message || response.statusText}`);
-      }
+      const result = await searchNewsArticles(keyword, { pageSize: 10, maxPages: 1 });
+      const formattedArticles = result.articles.slice(0, 10);
 
-      const data = await response.json();
-
-      // 결과가 없는 경우
-      if (!data.articles || data.articles.length === 0) {
+      if (formattedArticles.length === 0) {
         return {
           content: [
             {
@@ -333,29 +454,6 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           ],
         };
       }
-
-      // 기사 데이터 포맷팅
-      const formattedArticles = data.articles
-        .filter(article => article.title && article.title !== '[Removed]')
-        .slice(0, 10) // 최대 10개
-        .map(article => {
-          const publishedDate = article.publishedAt 
-            ? new Date(article.publishedAt).toLocaleDateString('ko-KR', {
-                year: 'numeric',
-                month: 'long',
-                day: 'numeric'
-              })
-            : '날짜 정보 없음';
-
-          return {
-            title: article.title || '제목 없음',
-            summary: article.description || article.content?.substring(0, 200) || '요약 정보 없음',
-            date: publishedDate,
-            source: article.source?.name || '출처 정보 없음',
-            category: '뉴스',
-            url: article.url || '#',
-          };
-        });
 
       // 결과 포맷팅
       let articlesList = `🔍 "${keyword}"에 대한 뉴스 기사 검색 결과 (${formattedArticles.length}건)\n\n`;
@@ -716,16 +814,18 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   };
 });
 
-// 서버 시작
-async function main() {
-  // 표준 입출력을 통한 통신 설정
-  const transport = new StdioServerTransport();
-  await server.connect(transport);
-  console.error('MCP AI 기사 검색 및 라디오 방송 서버가 시작되었습니다.');
-}
+// 서버 시작 (직접 실행할 때만)
+if (import.meta.url === `file://${process.argv[1]}` || process.argv[1]?.endsWith('mcp-server.js')) {
+  async function main() {
+    // 표준 입출력을 통한 통신 설정
+    const transport = new StdioServerTransport();
+    await server.connect(transport);
+    console.error('MCP AI 기사 검색 및 라디오 방송 서버가 시작되었습니다.');
+  }
 
-main().catch((error) => {
-  console.error('서버 오류:', error);
-  process.exit(1);
-});
+  main().catch((error) => {
+    console.error('서버 오류:', error);
+    process.exit(1);
+  });
+}
 

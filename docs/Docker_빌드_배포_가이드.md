@@ -1,7 +1,10 @@
 # 🐳 Docker 빌드 및 배포 완전 가이드
 
 **작성일**: 2025년 1월  
+**버전**: 2.0.0 (MCP 서버 통합 버전)
 **목적**: Docker를 사용한 프로젝트 빌드 및 배포 방법
+
+> **✅ MCP 서버 통합 완료**: 모든 주요 기능이 MCP 서버로 제공되며, Docker 이미지에도 포함됩니다.
 
 ---
 
@@ -126,9 +129,17 @@ test02/
 2. **Backend** (포트 3001)
    - Node.js API 서버
    - RESTful API 제공
+   - ✅ MCP 서버 통합: `mcp-server.js`의 뉴스 검색 함수 직접 호출
+   - MCP 서버 파일 포함 (`mcp-server.js`)
 
 3. **Python MCP** (내부 통신)
    - Python MCP 통합 서버
+   - ✅ 모든 Python MCP 서버 포함:
+     - `mcp-unified-server.py` (도서 추천, 계산기)
+     - `mcp-error-log-analyzer.py` (에러 로그 분석)
+     - `mcp-sql-query-analyzer.py` (SQL 쿼리 분석)
+     - `mcp-impact-analyzer.py` (영향도 분석)
+     - `mcp-screen-validator-http-server.py` (화면 검증)
    - Cursor AI와 통신
 
 4. **Python HTTP** (포트 3002)

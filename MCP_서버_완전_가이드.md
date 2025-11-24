@@ -1,9 +1,11 @@
 # 📚 MCP 서버 완전 가이드
 
 **작성일**: 2025년 1월  
-**버전**: 2.0.0 (통합 버전)
+**버전**: 3.0.0 (완전 MCP 서버화 버전)
 
 > MCP 서버 설정부터 사용법, 테스트까지 모든 내용을 한 곳에 모았습니다.
+> 
+> **✅ 모든 기능이 MCP 서버화되었습니다!** 뉴스 검색, 에러 로그 분석, SQL 쿼리 분석, 도서 추천 등 모든 기능이 MCP 서버를 통해 제공됩니다.
 
 ---
 
@@ -42,12 +44,13 @@ MCP 서버가 있는 상황:
 
 ## 2. 프로젝트의 MCP 서버 목록
 
-우리 프로젝트에는 **5개의 MCP 서버**가 있습니다:
+우리 프로젝트에는 **6개의 MCP 서버**가 있습니다 (모든 주요 기능이 MCP 서버화됨):
 
 ### 1️⃣ **mcp-server.js** (Node.js 서버)
 - **역할**: AI 기사 검색 및 라디오 방송 음악 정보
 - **언어**: JavaScript (Node.js)
 - **파일 위치**: `mcp-server.js`
+- **✅ MCP 서버화 완료**: API 서버(`api-server.js`)에서도 이 MCP 서버의 뉴스 검색 함수를 직접 호출하여 사용합니다.
 
 ### 2️⃣ **mcp-unified-server.py** (Python 통합 서버)
 - **역할**: 덧셈 계산기 + 도서 검색/추천
@@ -66,7 +69,13 @@ MCP 서버가 있는 상황:
 - **파일 위치**: `mcp-sql-query-analyzer.py`
 - **특징**: 3000-4000라인 복잡한 쿼리 분석 지원, JSON 및 마크다운 리포트 생성
 
-### 5️⃣ **mcp-screen-validator-http-server.py** (Python HTTP 서버)
+### 5️⃣ **mcp-impact-analyzer.py** (Python 영향도 분석 서버)
+- **역할**: 테이블/컬럼 변경 시 워크스페이스 전체 영향도 분석
+- **언어**: Python
+- **파일 위치**: `mcp-impact-analyzer.py`
+- **특징**: 데이터베이스 스키마 변경 시 영향받는 코드 자동 검색
+
+### 6️⃣ **mcp-screen-validator-http-server.py** (Python HTTP 서버)
 - **역할**: 웹 페이지 화면 검증 (스크린샷, 요소 확인)
 - **언어**: Python
 - **파일 위치**: `mcp-screen-validator-http-server.py`
@@ -83,6 +92,7 @@ MCP 서버가 있는 상황:
 1. **`search_ai_articles`** - AI 뉴스 검색
    - 키워드로 AI 관련 뉴스 검색
    - News API 사용
+   - **✅ MCP 서버화 완료**: `searchNewsArticles` 함수가 export되어 API 서버에서도 직접 호출 가능
 
 2. **`get_radio_song`** - 현재 재생 중인 노래
    - 한국 라디오 방송 (KBS, MBC, SBS) 현재 노래 정보
@@ -92,6 +102,27 @@ MCP 서버가 있는 상황:
 
 4. **`recommend_similar_songs`** - 유사 노래 추천
    - Last.fm API 기반 음악 추천
+
+#### MCP 서버 통합 사용
+
+**API 서버에서의 사용:**
+```javascript
+import { searchNewsArticles } from './mcp-server.js';
+
+// API 서버의 /api/news 엔드포인트에서 MCP 서버 함수 직접 호출
+const result = await searchNewsArticles(keyword, {
+  pageSize: 100,
+  maxPages: 10,
+  fromDate: fromDate,
+  language: 'ko',
+  sortBy: 'publishedAt'
+});
+```
+
+이렇게 하면:
+- ✅ 코드 중복 제거
+- ✅ 일관된 뉴스 검색 로직
+- ✅ MCP 서버와 API 서버 간 기능 공유
 
 #### 사용 예시
 
@@ -170,7 +201,28 @@ MCP 서버가 있는 상황:
 
 ---
 
-### 5️⃣ mcp-unified-server.py (Python 통합 서버)
+### 5️⃣ mcp-impact-analyzer.py (Python 영향도 분석 서버)
+
+#### 제공하는 기능 (도구)
+
+1. **`analyze_impact`** - 테이블/컬럼 영향도 분석
+   - 테이블 또는 컬럼 변경 시 워크스페이스 전체 영향도 분석
+   - 영향받는 파일, 함수, 코드 위치 자동 검색
+   - 변경 사항에 대한 상세 리포트 생성
+
+#### 사용 예시
+
+```
+"users 테이블을 변경할 때 영향받는 코드를 찾아줘"
+→ analyze_impact 도구 사용 (table_name: "users")
+→ 결과: 영향받는 파일 목록, 함수 목록, 코드 스니펫 제공
+```
+
+**상세 가이드**: [`docs/영향도_분석_가이드.md`](./docs/영향도_분석_가이드.md)
+
+---
+
+### 6️⃣ mcp-unified-server.py (Python 통합 서버)
 
 #### 제공하는 기능 (도구)
 
@@ -201,7 +253,65 @@ MCP 서버가 있는 상황:
 
 ---
 
-## 4. MCP 서버 설정 방법
+## 4. MCP 서버 아키텍처
+
+### 전체 시스템 구조
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                    Vue 프론트엔드                        │
+│              (src/App.vue, src/services/)               │
+└────────────────────┬────────────────────────────────────┘
+                     │ HTTP 요청
+                     ▼
+┌─────────────────────────────────────────────────────────┐
+│              API 서버 (api-server.js)                    │
+│  ┌──────────────────────────────────────────────────┐  │
+│  │  /api/news → MCP 서버 함수 호출                  │  │
+│  │  /api/news/economy → MCP 서버 함수 호출          │  │
+│  └──────────────────────────────────────────────────┘  │
+└────────────────────┬────────────────────────────────────┘
+                     │ import/호출
+                     ▼
+┌─────────────────────────────────────────────────────────┐
+│         MCP 서버들 (모듈화된 함수 제공)                  │
+│  ┌──────────────────────────────────────────────────┐  │
+│  │  mcp-server.js                                   │  │
+│  │  - searchNewsArticles() [export]                │  │
+│  │  - search_ai_articles [MCP tool]               │  │
+│  └──────────────────────────────────────────────────┘  │
+│  ┌──────────────────────────────────────────────────┐  │
+│  │  mcp-error-log-analyzer.py                       │  │
+│  │  - analyze_error_logs [MCP tool]                │  │
+│  └──────────────────────────────────────────────────┘  │
+│  ┌──────────────────────────────────────────────────┐  │
+│  │  mcp-sql-query-analyzer.py                       │  │
+│  │  - analyze_sql_query [MCP tool]                 │  │
+│  └──────────────────────────────────────────────────┘  │
+│  ┌──────────────────────────────────────────────────┐  │
+│  │  mcp-unified-server.py                           │  │
+│  │  - recommend_books [MCP tool]                   │  │
+│  │  - add_numbers [MCP tool]                      │  │
+│  └──────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────┘
+                     │
+                     ▼
+┌─────────────────────────────────────────────────────────┐
+│              외부 API (News API, Last.fm 등)             │
+└─────────────────────────────────────────────────────────┘
+```
+
+### MCP 서버의 이중 역할
+
+1. **MCP 프로토콜 서버**: Cursor AI와 통신하여 도구 제공
+2. **모듈화된 함수**: API 서버에서 직접 import하여 사용
+
+예시:
+- `mcp-server.js`의 `searchNewsArticles` 함수는:
+  - ✅ MCP 도구 `search_ai_articles`로 Cursor AI에서 사용 가능
+  - ✅ export된 함수로 API 서버에서 직접 호출 가능
+
+## 5. MCP 서버 설정 방법
 
 ### Cursor AI에서 MCP 서버 설정
 
@@ -228,6 +338,11 @@ MCP 서버가 있는 상황:
     "sql-query-analyzer": {
       "command": "python",
       "args": ["mcp-sql-query-analyzer.py"],
+      "cwd": "C:/test/test02"
+    },
+    "impact-analyzer": {
+      "command": "python",
+      "args": ["mcp-impact-analyzer.py"],
       "cwd": "C:/test/test02"
     }
   }
@@ -268,7 +383,7 @@ npm install
 
 ---
 
-## 5. 도구 테스트 가이드
+## 6. 도구 테스트 가이드
 
 ### 테스트 1: 덧셈 계산기 (`add_numbers`)
 
@@ -357,7 +472,27 @@ npm install
 
 ---
 
-### 테스트 5: 도서 추천 (`recommend_books`)
+### 테스트 5: 영향도 분석 (`analyze_impact`)
+
+**요청:**
+```
+"users 테이블을 변경할 때 영향받는 코드를 찾아줘"
+```
+
+**예상 동작:**
+1. Cursor AI가 `analyze_impact` 도구를 자동으로 선택
+2. 파라미터: `{ "table_name": "users" }`
+3. MCP 서버가 워크스페이스 전체를 검색하여 영향받는 코드 찾기
+4. 결과: 영향받는 파일 목록, 함수 목록, 코드 스니펫 제공
+
+**테스트 방법:**
+1. Cursor AI 채팅에서 "users 테이블을 변경할 때 영향받는 코드를 찾아줘" 입력
+2. AI가 자동으로 `analyze_impact` 도구 사용
+3. 결과 확인: 영향받는 파일 목록, 함수 목록, 코드 스니펫
+
+---
+
+### 테스트 6: 도서 추천 (`recommend_books`)
 
 **요청:**
 ```
@@ -377,7 +512,7 @@ npm install
 
 ---
 
-## 6. 문제 해결
+## 7. 문제 해결
 
 ### 문제 1: MCP 서버가 인식되지 않음
 
