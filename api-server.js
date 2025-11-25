@@ -2631,13 +2631,20 @@ const server = http.createServer(async (req, res) => {
         
         proxyReq = http.request(requestOptions, (proxyRes) => {
           clearTimeout(timeout);
+          console.log(`[API 서버] Python 서버 응답 수신: ${proxyRes.statusCode}`);
+          console.log(`[API 서버] 응답 헤더:`, proxyRes.headers);
+          
           let proxyBody = '';
+          let hasData = false;
           
           proxyRes.on('data', (chunk) => {
+            hasData = true;
             proxyBody += chunk.toString();
+            console.log(`[API 서버] 응답 데이터 청크 수신: ${chunk.length} bytes`);
           });
           
           proxyRes.on('end', () => {
+            console.log(`[API 서버] Python 서버 응답 완료. 총 데이터: ${proxyBody.length} bytes`);
             if (!res.headersSent) {
               try {
                 // 응답 본문이 비어있는지 확인
@@ -2655,11 +2662,13 @@ const server = http.createServer(async (req, res) => {
                   return;
                 }
                 
+                console.log(`[API 서버] 클라이언트에 응답 전송 시작`);
                 res.writeHead(proxyRes.statusCode || 200, {
                   'Content-Type': 'application/json',
                   'Access-Control-Allow-Origin': '*'
                 });
                 res.end(proxyBody);
+                console.log(`[API 서버] 클라이언트에 응답 전송 완료`);
               } catch (endError) {
                 console.error('[API 서버] 응답 전송 오류:', endError);
                 if (!res.headersSent) {
@@ -2673,12 +2682,16 @@ const server = http.createServer(async (req, res) => {
                   }));
                 }
               }
+            } else {
+              console.warn('[API 서버] 응답 헤더가 이미 전송되었습니다.');
             }
           });
           
           proxyRes.on('error', (error) => {
             clearTimeout(timeout);
             console.error('[API 서버] Python 서버 응답 스트림 오류:', error);
+            console.error('[API 서버] 오류 코드:', error.code);
+            console.error('[API 서버] 오류 메시지:', error.message);
             if (!res.headersSent) {
               res.writeHead(500, { 
                 'Content-Type': 'application/json',
@@ -2687,10 +2700,18 @@ const server = http.createServer(async (req, res) => {
               res.end(JSON.stringify({ 
                 success: false,
                 error: `Python 서버 응답 오류: ${error.message}`,
+                errorCode: error.code,
                 suggestion: 'Python HTTP 서버가 정상적으로 실행 중인지 확인하세요.'
               }));
             }
           });
+          
+          // 응답이 너무 오래 걸리면 경고
+          setTimeout(() => {
+            if (!hasData && !res.headersSent) {
+              console.warn('[API 서버] Python 서버 응답이 지연되고 있습니다...');
+            }
+          }, 5000);
         });
         
         proxyReq.on('error', (error) => {
@@ -2698,6 +2719,7 @@ const server = http.createServer(async (req, res) => {
           console.error('[API 서버] 화면 검증 프록시 연결 오류:', error);
           console.error('[API 서버] 오류 코드:', error.code);
           console.error('[API 서버] 오류 메시지:', error.message);
+          console.error('[API 서버] 오류 스택:', error.stack);
           
           if (!res.headersSent) {
             let errorMessage = `Python 서버 연결 실패: ${error.message}`;
@@ -2709,6 +2731,9 @@ const server = http.createServer(async (req, res) => {
             } else if (error.code === 'ETIMEDOUT') {
               errorMessage = 'Python 서버 연결 타임아웃';
               suggestion = 'Python 서버가 응답하지 않습니다. 서버 상태를 확인하세요.';
+            } else if (error.code === 'ECONNRESET') {
+              errorMessage = 'Python 서버 연결이 끊어졌습니다.';
+              suggestion = 'Python 서버가 중간에 연결을 끊었습니다. 서버 로그를 확인하세요.';
             }
             
             res.writeHead(500, { 
@@ -2721,7 +2746,17 @@ const server = http.createServer(async (req, res) => {
               errorCode: error.code,
               suggestion: suggestion
             }));
+          } else {
+            console.warn('[API 서버] 응답 헤더가 이미 전송되어 에러 응답을 보낼 수 없습니다.');
           }
+        });
+        
+        // 연결 시작 로깅
+        proxyReq.on('socket', (socket) => {
+          console.log('[API 서버] Python 서버 소켓 연결 시작');
+          socket.on('error', (socketError) => {
+            console.error('[API 서버] 소켓 오류:', socketError);
+          });
         });
         
         proxyReq.setTimeout(130000, () => {

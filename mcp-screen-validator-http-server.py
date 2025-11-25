@@ -671,13 +671,21 @@ class ScreenValidationHandler(BaseHTTPRequestHandler):
         response = None
         response_sent = False
         try:
+            print(f"[화면 검증 서버] POST 요청 수신: {self.path}", file=sys.stderr)
+            print(f"[화면 검증 서버] 요청 헤더: {dict(self.headers)}", file=sys.stderr)
+            
             # 요청 본문 읽기
             content_length = int(self.headers.get('Content-Length', 0))
+            print(f"[화면 검증 서버] Content-Length: {content_length}", file=sys.stderr)
+            
             if content_length == 0:
                 raise ValueError("Content-Length가 0입니다.")
             
             post_data = self.rfile.read(content_length)
+            print(f"[화면 검증 서버] 요청 본문 읽기 완료: {len(post_data)} bytes", file=sys.stderr)
+            
             data = json.loads(post_data.decode('utf-8'))
+            print(f"[화면 검증 서버] JSON 파싱 완료: {data}", file=sys.stderr)
             
             url = data.get('url', '')
             selector = data.get('selector')
@@ -838,18 +846,24 @@ class ScreenValidationHandler(BaseHTTPRequestHandler):
         except json.JSONDecodeError as e:
             error_msg = f"JSON 파싱 오류: {str(e)}"
             print(f"[화면 검증 서버] {error_msg}", file=sys.stderr)
+            import traceback
+            print(f"[화면 검증 서버] 상세:\n{traceback.format_exc()}", file=sys.stderr)
             error_response = json.dumps({
                 "success": False,
                 "error": error_msg,
                 "errorType": "JSONDecodeError"
             }, ensure_ascii=False)
             
-            self.send_response(400)
-            self.send_header('Content-Type', 'application/json; charset=utf-8')
-            self.send_header('Access-Control-Allow-Origin', '*')
-            self.end_headers()
-            self.wfile.write(error_response.encode('utf-8'))
-            self.wfile.flush()
+            try:
+                self.send_response(400)
+                self.send_header('Content-Type', 'application/json; charset=utf-8')
+                self.send_header('Access-Control-Allow-Origin', '*')
+                self.end_headers()
+                self.wfile.write(error_response.encode('utf-8'))
+                self.wfile.flush()
+                print(f"[화면 검증 서버] 에러 응답 전송 완료 (400)", file=sys.stderr)
+            except Exception as send_err:
+                print(f"[화면 검증 서버] 에러 응답 전송 실패: {send_err}", file=sys.stderr)
         
         except Exception as e:
             error_msg = str(e)
