@@ -60,40 +60,69 @@ def run_async_safely(coro, timeout=120.0):
     """안전하게 비동기 함수를 실행합니다."""
     import concurrent.futures
     import threading
+    import traceback
     
     def run_in_thread():
         """새 스레드에서 이벤트 루프를 생성하고 실행합니다."""
-        new_loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(new_loop)
+        new_loop = None
         try:
-            return new_loop.run_until_complete(
+            new_loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(new_loop)
+            result = new_loop.run_until_complete(
                 asyncio.wait_for(coro, timeout=timeout)
             )
+            return result
         except asyncio.TimeoutError:
-            raise Exception(f"비동기 함수 실행 타임아웃 ({timeout}초 초과)")
+            error_msg = f"비동기 함수 실행 타임아웃 ({timeout}초 초과)"
+            print(f"[run_async_safely] {error_msg}", file=sys.stderr)
+            raise Exception(error_msg)
         except Exception as e:
+            error_msg = f"비동기 함수 실행 중 오류: {str(e)}"
+            print(f"[run_async_safely] {error_msg}", file=sys.stderr)
+            print(f"[run_async_safely] 상세:\n{traceback.format_exc()}", file=sys.stderr)
             raise e
         finally:
-            try:
-                # 진행 중인 작업 정리
-                pending = asyncio.all_tasks(new_loop)
-                for task in pending:
-                    task.cancel()
-                if pending:
-                    new_loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
-            except:
-                pass
-            finally:
-                new_loop.close()
+            # 이벤트 루프 정리
+            if new_loop:
+                try:
+                    # 진행 중인 작업 정리
+                    pending = asyncio.all_tasks(new_loop)
+                    for task in pending:
+                        task.cancel()
+                    if pending:
+                        try:
+                            new_loop.run_until_complete(
+                                asyncio.gather(*pending, return_exceptions=True)
+                            )
+                        except:
+                            pass
+                except:
+                    pass
+                finally:
+                    try:
+                        new_loop.close()
+                    except:
+                        pass
     
     # 항상 새 스레드에서 실행 (HTTP 서버의 동기 컨텍스트와 분리)
     try:
         with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
             future = executor.submit(run_in_thread)
-            return future.result(timeout=timeout + 10)
-    except concurrent.futures.TimeoutError:
-        raise Exception(f"스레드 실행 타임아웃 ({timeout + 10}초 초과)")
+            try:
+                result = future.result(timeout=timeout + 10)
+                return result
+            except concurrent.futures.TimeoutError:
+                error_msg = f"스레드 실행 타임아웃 ({timeout + 10}초 초과)"
+                print(f"[run_async_safely] {error_msg}", file=sys.stderr)
+                raise Exception(error_msg)
+            except Exception as e:
+                print(f"[run_async_safely] 스레드 실행 오류: {str(e)}", file=sys.stderr)
+                print(f"[run_async_safely] 상세:\n{traceback.format_exc()}", file=sys.stderr)
+                raise e
     except Exception as e:
+        error_msg = f"run_async_safely 실행 실패: {str(e)}"
+        print(f"[run_async_safely] {error_msg}", file=sys.stderr)
+        print(f"[run_async_safely] 상세:\n{traceback.format_exc()}", file=sys.stderr)
         raise e
 
 async def get_browser() -> Browser:
@@ -664,13 +693,19 @@ class ScreenValidationHandler(BaseHTTPRequestHandler):
                 # 경로에 따라 처리 (타임아웃 설정)
                 try:
                     if self.path == '/api/screen/validate':
-                        print(f"[화면 검증 서버] 검증 요청: {url}", file=sys.stderr)
+                        print(f"[화면 검증 서버] 검증 요청 수신: {url}", file=sys.stderr)
+                        print(f"[화면 검증 서버] 선택자: {selector}, 예상값: {expected_value}", file=sys.stderr)
                         try:
+                            print(f"[화면 검증 서버] 비동기 함수 실행 시작...", file=sys.stderr)
                             result = run_async_safely(
                                 validate_screen(url, selector, expected_value),
                                 timeout=120.0
                             )
+                            print(f"[화면 검증 서버] 비동기 함수 실행 완료", file=sys.stderr)
+                            if result is None:
+                                raise Exception("비동기 함수가 None을 반환했습니다.")
                             response = json.dumps(result, ensure_ascii=False)
+                            print(f"[화면 검증 서버] 응답 생성 완료 (길이: {len(response)} bytes)", file=sys.stderr)
                         except Exception as func_error:
                             error_msg = f"화면 검증 중 오류 발생: {str(func_error)}"
                             print(f"[화면 검증 서버] 함수 실행 오류: {error_msg}", file=sys.stderr)
@@ -681,6 +716,7 @@ class ScreenValidationHandler(BaseHTTPRequestHandler):
                                 "error": error_msg,
                                 "errorType": type(func_error).__name__
                             }, ensure_ascii=False)
+                            print(f"[화면 검증 서버] 에러 응답 생성 완료", file=sys.stderr)
                     
                     elif self.path == '/api/screen/capture':
                         print(f"[화면 검증 서버] 캡처 요청: {url}", file=sys.stderr)
@@ -760,31 +796,36 @@ class ScreenValidationHandler(BaseHTTPRequestHandler):
                 }, ensure_ascii=False)
                 response_sent = True
             
-            # 응답 전송
-            if response:
-                try:
-                    self.send_response(200)
-                    self.send_header('Content-Type', 'application/json; charset=utf-8')
-                    self.send_header('Access-Control-Allow-Origin', '*')
-                    self.send_header('Access-Control-Allow-Methods', 'POST, OPTIONS')
-                    self.send_header('Access-Control-Allow-Headers', 'Content-Type')
-                    self.end_headers()
-                    
-                    response_bytes = response.encode('utf-8')
-                    self.wfile.write(response_bytes)
-                    self.wfile.flush()
-                    print(f"[화면 검증 서버] 응답 전송 완료: {self.path} (길이: {len(response_bytes)} bytes)", file=sys.stderr)
-                except Exception as send_error:
-                    print(f"[화면 검증 서버] 응답 전송 오류: {send_error}", file=sys.stderr)
-                    import traceback
-                    print(f"[화면 검증 서버] 상세:\n{traceback.format_exc()}", file=sys.stderr)
-            else:
-                # 응답이 생성되지 않은 경우
-                error_response = json.dumps({
+            # 응답 전송 (항상 응답을 보내도록 보장)
+            if not response:
+                response = json.dumps({
                     "success": False,
                     "error": "서버 내부 오류: 응답을 생성하지 못했습니다."
                 }, ensure_ascii=False)
+            
+            try:
+                print(f"[화면 검증 서버] 응답 전송 시작: {self.path}", file=sys.stderr)
+                self.send_response(200)
+                self.send_header('Content-Type', 'application/json; charset=utf-8')
+                self.send_header('Access-Control-Allow-Origin', '*')
+                self.send_header('Access-Control-Allow-Methods', 'POST, OPTIONS')
+                self.send_header('Access-Control-Allow-Headers', 'Content-Type')
+                self.end_headers()
+                
+                response_bytes = response.encode('utf-8')
+                self.wfile.write(response_bytes)
+                self.wfile.flush()
+                print(f"[화면 검증 서버] 응답 전송 완료: {self.path} (길이: {len(response_bytes)} bytes)", file=sys.stderr)
+            except Exception as send_error:
+                print(f"[화면 검증 서버] 응답 전송 오류: {send_error}", file=sys.stderr)
+                import traceback
+                print(f"[화면 검증 서버] 상세:\n{traceback.format_exc()}", file=sys.stderr)
+                # 응답 전송 실패 시에도 최소한의 에러 응답 시도
                 try:
+                    error_response = json.dumps({
+                        "success": False,
+                        "error": f"응답 전송 중 오류 발생: {str(send_error)}"
+                    }, ensure_ascii=False)
                     self.send_response(500)
                     self.send_header('Content-Type', 'application/json; charset=utf-8')
                     self.send_header('Access-Control-Allow-Origin', '*')
@@ -792,7 +833,7 @@ class ScreenValidationHandler(BaseHTTPRequestHandler):
                     self.wfile.write(error_response.encode('utf-8'))
                     self.wfile.flush()
                 except:
-                    pass
+                    pass  # 이미 응답을 보냈거나 연결이 끊어진 경우
         
         except json.JSONDecodeError as e:
             error_msg = f"JSON 파싱 오류: {str(e)}"
