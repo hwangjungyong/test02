@@ -3569,7 +3569,10 @@ const server = http.createServer(async (req, res) => {
           stdout = execError.stdout || '';
           stderr = execError.stderr || execError.message || '';
           console.error('[API 서버] Python 스크립트 실행 오류:', execError.message);
-          console.error('[API 서버] stderr:', stderr && typeof stderr === 'string' ? stderr.substring(0, 1000) : 'null');
+          const stderrPreview = (stderr && typeof stderr === 'string' && stderr.length > 0) 
+            ? stderr.substring(0, Math.min(1000, stderr.length)) 
+            : (stderr || 'null');
+          console.error('[API 서버] stderr:', stderrPreview);
           
           // 임시 파일 삭제
           try {
@@ -3581,13 +3584,18 @@ const server = http.createServer(async (req, res) => {
           return sendJSON(res, 500, {
             success: false,
             error: `Python 스크립트 실행 오류: ${execError.message}`,
-            stderr: stderr && typeof stderr === 'string' ? stderr.substring(0, 1000) : null
+            stderr: (stderr && typeof stderr === 'string' && stderr.length > 0) 
+              ? stderr.substring(0, Math.min(1000, stderr.length)) 
+              : null
           });
         }
         
         const elapsedTime = ((Date.now() - startTime) / 1000).toFixed(2);
         console.log(`[API 서버] Python 스크립트 실행 완료 (소요 시간: ${elapsedTime}초)`);
-        console.log('[API 서버] stdout:', stdout && typeof stdout === 'string' ? stdout.substring(0, 500) : 'null');
+        const stdoutPreview = (stdout && typeof stdout === 'string' && stdout.length > 0)
+          ? stdout.substring(0, Math.min(500, stdout.length))
+          : (stdout || 'null');
+        console.log('[API 서버] stdout:', stdoutPreview);
         
         // 임시 파일 삭제
         try {
@@ -3615,11 +3623,18 @@ const server = http.createServer(async (req, res) => {
           console.error('[API 서버] JSON 파싱 오류:', parseError.message);
           console.error('[API 서버] stdout:', stdout);
           
+          const stdoutPreview = (stdout && typeof stdout === 'string' && stdout.length > 0)
+            ? stdout.substring(0, Math.min(2000, stdout.length))
+            : null;
+          const stderrPreview = (stderr && typeof stderr === 'string' && stderr.length > 0)
+            ? stderr.substring(0, Math.min(1000, stderr.length))
+            : null;
+          
           return sendJSON(res, 500, {
             success: false,
-            error: '영향도 분석 결과 파싱 오류',
-            stdout: stdout && typeof stdout === 'string' ? stdout.substring(0, 2000) : null,
-            stderr: stderr && typeof stderr === 'string' ? stderr.substring(0, 1000) : null
+            error: `영향도 분석 결과 파싱 오류: ${parseError.message}`,
+            stdout: stdoutPreview,
+            stderr: stderrPreview
           });
         }
         

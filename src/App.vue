@@ -7685,17 +7685,36 @@ const analyzeImpact = async () => {
     if (!response.ok) {
       let errorData
       try {
-        errorData = await response.json()
+        const responseText = await response.text()
+        try {
+          errorData = JSON.parse(responseText)
+        } catch (parseError) {
+          // JSON이 아닌 경우 텍스트를 에러 메시지로 사용
+          errorData = { error: responseText || `서버 오류 (${response.status} ${response.statusText})` }
+        }
       } catch (e) {
         errorData = { error: `서버 오류 (${response.status} ${response.statusText})` }
       }
-      throw new Error(errorData.error || `서버 오류 (${response.status})`)
+      
+      // 에러 메시지 구성
+      let errorMessage = errorData.error || `서버 오류 (${response.status})`
+      if (errorData.stdout) {
+        errorMessage += `\n\n출력:\n${errorData.stdout}`
+      }
+      if (errorData.stderr) {
+        errorMessage += `\n\n에러:\n${errorData.stderr}`
+      }
+      
+      throw new Error(errorMessage)
     }
     
     const data = await response.json()
     console.log('[프론트엔드] 영향도 분석 결과:', data.success ? '성공' : '실패')
     
     if (data.success) {
+      if (!data.impact_analysis) {
+        throw new Error('영향도 분석 결과가 없습니다.')
+      }
       impactAnalysisResult.value = data.impact_analysis
       showImpactAnalysis.value = true
     } else {
