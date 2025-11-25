@@ -1670,17 +1670,30 @@ class ImpactAnalyzer:
     
     def _determine_column_usage_type(self, context: str) -> str:
         """컬럼 사용 타입 결정"""
-        if 'SELECT' in context and context.index('SELECT') < context.index('FROM'):
-            return 'SELECT'
-        elif 'WHERE' in context:
+        context_upper = context.upper()
+        
+        # SELECT 절 확인
+        if 'SELECT' in context_upper and 'FROM' in context_upper:
+            try:
+                select_pos = context_upper.index('SELECT')
+                from_pos = context_upper.index('FROM')
+                if select_pos < from_pos:
+                    return 'SELECT'
+            except ValueError:
+                pass
+        
+        # WHERE 절 확인
+        if 'WHERE' in context_upper:
             return 'WHERE'
-        elif 'JOIN' in context and 'ON' in context:
+        
+        # JOIN 절 확인
+        if 'JOIN' in context_upper and 'ON' in context_upper:
             return 'JOIN'
-        elif 'GROUP BY' in context:
+        elif 'GROUP BY' in context_upper:
             return 'GROUP_BY'
-        elif 'ORDER BY' in context:
+        elif 'ORDER BY' in context_upper:
             return 'ORDER_BY'
-        elif 'HAVING' in context:
+        elif 'HAVING' in context_upper:
             return 'HAVING'
         else:
             return 'OTHER'
