@@ -3606,12 +3606,32 @@ const server = http.createServer(async (req, res) => {
         
         // JSON 결과 파싱
         try {
-          const impactResult = JSON.parse(stdout.trim());
+          if (!stdout || typeof stdout !== 'string' || stdout.trim().length === 0) {
+            throw new Error('Python 스크립트가 출력을 생성하지 않았습니다. stdout이 비어있습니다.');
+          }
+          
+          const trimmedStdout = stdout.trim();
+          let impactResult;
+          try {
+            impactResult = JSON.parse(trimmedStdout);
+          } catch (jsonError) {
+            console.error('[API 서버] JSON 파싱 실패:', jsonError.message);
+            const preview = trimmedStdout.length > 500 ? trimmedStdout.substring(0, 500) + '...' : trimmedStdout;
+            console.error('[API 서버] stdout 내용 (처음 500자):', preview);
+            throw new Error(`JSON 파싱 실패: ${jsonError.message}. Python 스크립트 출력이 유효한 JSON 형식이 아닙니다.`);
+          }
           
           if (!impactResult.success) {
             return sendJSON(res, 500, {
               success: false,
               error: impactResult.error || '영향도 분석 실패'
+            });
+          }
+          
+          if (!impactResult.impact_analysis) {
+            return sendJSON(res, 500, {
+              success: false,
+              error: '영향도 분석 결과가 없습니다. Python 스크립트가 올바른 형식의 결과를 반환하지 않았습니다.'
             });
           }
           
