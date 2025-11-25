@@ -269,9 +269,23 @@ async def read_element_text(page: Page, selector: str) -> str:
         # 여전히 찾지 못하면 페이지에서 제안할 선택자 찾기
         suggested = await get_suggested_selectors(page)
         
+        # 선택자가 CSS 선택자 형식이 아닌지 확인 (텍스트만 입력한 경우)
+        is_likely_text = not any(char in selector for char in ['#', '.', '[', '>', ' ', ':', '(', ')'])
+        
         # 여전히 찾지 못하면 에러
-        raise Exception(
-            f"요소를 찾을 수 없습니다: '{selector}'\n\n"
+        error_message = f"요소를 찾을 수 없습니다: '{selector}'\n\n"
+        
+        if is_likely_text:
+            error_message += (
+                f"⚠️ '{selector}'는 텍스트로 보입니다. CSS 선택자를 사용해야 합니다.\n\n"
+                f"💡 '{selector}' 텍스트를 포함하는 요소를 찾으려면:\n"
+                f"  - ID가 있다면: #{selector.lower()}-id 또는 #{selector.lower()}\n"
+                f"  - 클래스가 있다면: .{selector.lower()}-class 또는 .{selector.lower()}\n"
+                f"  - 태그라면: {selector.lower()}\n"
+                f"  - 텍스트로 찾기: //*[contains(text(), '{selector}')] (XPath)\n\n"
+            )
+        
+        error_message += (
             f"💡 CSS 선택자 예시:\n"
             f"  - ID: #element-id\n"
             f"  - 클래스: .class-name\n"
@@ -285,6 +299,8 @@ async def read_element_text(page: Page, selector: str) -> str:
             f"  3. 원하는 요소 클릭\n"
             f"  4. Elements 탭에서 선택된 요소 우클릭 → Copy → Copy selector"
         )
+        
+        raise Exception(error_message)
     except Exception as e:
         error_msg = str(e)
         if "요소를 찾을 수 없습니다" not in error_msg:

@@ -2091,15 +2091,14 @@
           
           <!-- 입력/클릭 액션 설정 - 간단한 버전 -->
           <div class="interact-actions-section">
-            <h3>⚡ 자동으로 할 일 설정</h3>
+            <h3>⚡ 자동 작업 설정</h3>
             <p class="section-description">
-              페이지에 접속한 후 자동으로 수행할 작업을 순서대로 설정하세요.
-              <br>예: 1) 검색창에 "MCP" 입력 → 2) 검색 버튼 클릭 → 3) 결과 확인
+              페이지 접속 후 자동으로 수행할 작업을 순서대로 추가하세요.
             </p>
             
             <div v-for="(action, index) in interactActions" :key="index" class="action-item">
               <div class="action-header">
-                <span class="action-number">📌 {{ index + 1 }}단계</span>
+                <span class="action-number">단계 {{ index + 1 }}</span>
                 <button 
                   v-if="interactActions.length > 1"
                   @click="removeAction(index)" 
@@ -2112,50 +2111,42 @@
               
               <div class="action-fields">
                 <div class="field-group">
-                  <label>무엇을 할까요?</label>
+                  <label>작업 유형</label>
                   <select v-model="action.type" class="input-field" @change="onActionTypeChange(action)">
-                    <option value="fill">📝 텍스트 입력하기</option>
-                    <option value="click">🖱️ 버튼/링크 클릭하기</option>
-                    <option value="select">📋 드롭다운에서 선택하기</option>
-                    <option value="check">☑️ 체크박스 체크하기</option>
-                    <option value="uncheck">☐ 체크박스 해제하기</option>
-                    <option value="wait">⏱️ 잠시 대기하기</option>
+                    <option value="fill">텍스트 입력</option>
+                    <option value="click">버튼/링크 클릭</option>
+                    <option value="select">드롭다운 선택</option>
+                    <option value="check">체크박스 체크</option>
+                    <option value="uncheck">체크박스 해제</option>
+                    <option value="wait">대기</option>
                   </select>
                 </div>
                 
                 <div v-if="action.type !== 'wait'" class="field-group">
-                  <label>어떤 요소를 찾을까요? (개발자 도구에서 복사)</label>
-                  <div class="help-box">
-                    <p>💡 <strong>간단한 방법:</strong></p>
-                    <ol>
-                      <li>브라우저에서 해당 페이지 열기</li>
-                      <li>F12 키 누르기 (개발자 도구 열림)</li>
-                      <li>왼쪽 상단의 요소 선택 아이콘 클릭</li>
-                      <li>원하는 요소 클릭</li>
-                      <li>Elements 탭에서 선택된 요소 우클릭 → Copy → Copy selector</li>
-                    </ol>
-                    <p>또는 간단하게: ID가 있으면 <code>#아이디명</code>, 클래스가 있으면 <code>.클래스명</code></p>
-                  </div>
+                  <label>요소 선택자</label>
                   <input
                     v-model="action.selector"
                     type="text"
                     :placeholder="getSelectorPlaceholder(action.type)"
                     class="input-field"
                   />
+                  <small class="input-hint">
+                    💡 F12 → 요소 선택 → 우클릭 → Copy selector 또는 간단히 #아이디명, .클래스명
+                  </small>
                 </div>
                 
                 <div v-if="action.type === 'fill'" class="field-group">
-                  <label>입력할 텍스트:</label>
+                  <label>입력할 텍스트</label>
                   <input
                     v-model="action.value"
                     type="text"
-                    placeholder="예: 검색어, 사용자명 등"
+                    placeholder="예: 검색어, 사용자명"
                     class="input-field"
                   />
                 </div>
                 
                 <div v-if="action.type === 'select'" class="field-group">
-                  <label>선택할 옵션:</label>
+                  <label>선택할 옵션</label>
                   <input
                     v-model="action.value"
                     type="text"
@@ -2165,14 +2156,13 @@
                 </div>
                 
                 <div v-if="action.type === 'wait'" class="field-group">
-                  <label>몇 초 대기할까요?</label>
+                  <label>대기 시간 (초)</label>
                   <input
                     v-model="action.value"
                     type="number"
-                    placeholder="예: 2 (2초 대기)"
+                    placeholder="예: 2"
                     class="input-field"
                   />
-                  <small class="input-hint">숫자만 입력하세요 (초 단위)</small>
                 </div>
               </div>
             </div>
@@ -2182,16 +2172,16 @@
             </button>
             
             <div class="input-group" style="margin-top: 1.5rem;">
-              <label for="interactResultSelector">📊 결과 확인 (선택사항):</label>
+              <label for="interactResultSelector">결과 확인 (선택사항)</label>
               <input
                 id="interactResultSelector"
                 v-model="interactResultSelector"
                 type="text"
-                placeholder="결과를 표시하는 요소의 선택자 (위와 같은 방법으로 복사)"
+                placeholder="결과를 표시하는 요소의 선택자"
                 class="input-field"
               />
               <small class="input-hint">
-                모든 작업이 끝난 후 결과를 읽어올 요소를 지정하세요. 비워두면 화면만 캡처합니다.
+                모든 작업 완료 후 결과를 읽어올 요소를 지정하세요. 비워두면 화면만 캡처합니다.
               </small>
             </div>
           </div>
@@ -8605,7 +8595,7 @@ const validateScreen = async () => {
     // 실제로는 API 서버를 통해 MCP Python 서버와 통신해야 함
     // 여기서는 간단한 예시로 구현 (실제 구현은 API 서버에 엔드포인트 추가 필요)
     
-    const response = await fetch('/api/screen/validate', {
+    const response = await fetch(getApiUrl('/api/screen/validate'), {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
@@ -8777,7 +8767,7 @@ const interactAndGetResult = async () => {
   interactResult.value = null
   
   try {
-    const response = await fetch('/api/screen/interact', {
+    const response = await fetch(getApiUrl('/api/screen/interact'), {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
@@ -8837,7 +8827,7 @@ const captureScreenOnly = async () => {
   screenScreenshot.value = null
   
   try {
-    const response = await fetch('/api/screen/capture', {
+    const response = await fetch(getApiUrl('/api/screen/capture'), {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
@@ -10513,6 +10503,7 @@ onMounted(() => {
   border-left: 5px solid #ffc107;
   border-radius: 12px;
   box-shadow: 0 2px 8px rgba(255, 193, 7, 0.2);
+  text-align: left;
 }
 
 .error-hint-header {
@@ -10522,6 +10513,7 @@ onMounted(() => {
   margin-bottom: 0.75rem;
   color: #856404;
   font-weight: 600;
+  text-align: left;
 }
 
 .hint-icon {
@@ -10540,6 +10532,7 @@ onMounted(() => {
   padding: 0.75rem;
   border-radius: 6px;
   border: 1px solid rgba(255, 193, 7, 0.3);
+  text-align: left;
 }
 
 .textarea-field {
