@@ -2205,7 +2205,6 @@ const showBookRecommendation = ref(false)
 const showBookHistory = ref(false)
 const showScreenValidation = ref(false)
 const showSQLQueryAnalysis = ref(false)
-const showMCPGuide = ref(false)
 const showErrorLogAnalysis = ref(false)
 
 // SQL 쿼리 분석 관련
