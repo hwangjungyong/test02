@@ -1,0 +1,57 @@
+/**
+ * CSS 변수 정의
+ * 프로젝트 전역에서 사용되는 색상, 간격, 폰트 등을 정의
+ */
+
+:root {
+  /* 색상 */
+  --color-primary: #667eea;
+  --color-primary-dark: #764ba2;
+  --color-secondary: #f093fb;
+  --color-secondary-dark: #f5576c;
+  --color-success: #4caf50;
+  --color-warning: #ff9800;
+  --color-danger: #f44336;
+  --color-info: #2196f3;
+  
+  /* 텍스트 색상 */
+  --text-primary: #213547;
+  --text-secondary: #666;
+  --text-light: #999;
+  --text-white: #ffffff;
+  
+  /* 배경 색상 */
+  --bg-primary: #ffffff;
+  --bg-secondary: #f5f5f5;
+  --bg-dark: #242424;
+  
+  /* 간격 */
+  --spacing-xs: 4px;
+  --spacing-sm: 8px;
+  --spacing-md: 16px;
+  --spacing-lg: 24px;
+  --spacing-xl: 32px;
+  
+  /* 폰트 크기 */
+  --font-size-xs: 12px;
+  --font-size-sm: 14px;
+  --font-size-md: 16px;
+  --font-size-lg: 18px;
+  --font-size-xl: 24px;
+  
+  /* 테두리 반경 */
+  --border-radius-sm: 4px;
+  --border-radius-md: 8px;
+  --border-radius-lg: 12px;
+  
+  /* 그림자 */
+  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.1);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.15);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.2);
+  
+  /* 전환 효과 */
+  --transition-fast: 0.2s ease;
+  --transition-normal: 0.3s ease;
+  --transition-slow: 0.5s ease;
+}
+

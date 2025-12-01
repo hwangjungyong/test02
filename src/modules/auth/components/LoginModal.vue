@@ -2,7 +2,7 @@
   <div v-if="modelValue" class="modal-overlay" @click="$emit('update:modelValue', false)">
     <div class="modal-content auth-modal" @click.stop>
       <div class="modal-header">
-        <h2>📝 회원가입</h2>
+        <h2>🔐 로그인</h2>
         <button @click="$emit('update:modelValue', false)" class="btn-close">✕</button>
       </div>
       <div class="modal-body">
@@ -22,18 +22,8 @@
             <input 
               v-model="form.password" 
               type="password" 
-              placeholder="비밀번호를 입력하세요 (최소 6자)"
+              placeholder="비밀번호를 입력하세요"
               required
-              minlength="6"
-              class="form-input"
-            />
-          </div>
-          <div class="form-group">
-            <label>이름 (선택사항)</label>
-            <input 
-              v-model="form.name" 
-              type="text" 
-              placeholder="이름을 입력하세요"
               class="form-input"
             />
           </div>
@@ -45,13 +35,13 @@
                 <li>터미널에서 프로젝트 폴더로 이동</li>
                 <li><code>npm run api-server</code> 실행</li>
                 <li>또는 <code>start-dev.bat</code> 실행</li>
-                <li>서버가 시작되면 다시 회원가입 시도</li>
+                <li>서버가 시작되면 다시 로그인 시도</li>
               </ol>
             </div>
           </div>
           <div class="form-actions">
             <button type="submit" class="btn btn-primary" :disabled="isLoading">
-              {{ isLoading ? '가입 중...' : '회원가입' }}
+              {{ isLoading ? '로그인 중...' : '로그인' }}
             </button>
             <button type="button" @click="$emit('update:modelValue', false)" class="btn btn-secondary">
               취소
@@ -65,7 +55,7 @@
 
 <script setup>
 import { ref, computed } from 'vue'
-import { useAuthStore } from '../stores/auth.js'
+import { useAuthStore } from '../../../stores/auth.js'
 
 const props = defineProps({
   modelValue: {
@@ -77,25 +67,22 @@ const props = defineProps({
 const emit = defineEmits(['update:modelValue', 'success'])
 
 const authStore = useAuthStore()
-const form = ref({ email: '', password: '', name: '' })
+const form = ref({ email: '', password: '' })
 const error = ref('')
 
 const isLoading = computed(() => authStore.isLoading)
 
 async function handleSubmit() {
   error.value = ''
-  const result = await authStore.signup(
-    form.value.email, 
-    form.value.password, 
-    form.value.name
-  )
+  const result = await authStore.login(form.value.email, form.value.password)
   
   if (result.success) {
     emit('update:modelValue', false)
-    form.value = { email: '', password: '', name: '' }
-    emit('success', '회원가입 성공!')
+    form.value = { email: '', password: '' }
+    emit('success', '로그인 성공!')
   } else {
-    error.value = result.error || '회원가입에 실패했습니다.'
+    // 에러 메시지에 줄바꿈이 포함될 수 있으므로 pre-line 스타일 적용
+    error.value = result.error || '로그인에 실패했습니다.'
   }
 }
 </script>

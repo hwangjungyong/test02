@@ -505,7 +505,7 @@
 </template>
 
 <script>
-import { apiRequest } from '../../services/api.js';
+import { apiRequest } from '../../../services/api.js';
 
 export default {
   name: 'VocManagement',

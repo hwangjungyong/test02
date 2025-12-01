@@ -83,29 +83,53 @@ http://localhost:5173
 ```
 test02/
 ├── src/                          # Vue 프론트엔드
-│   ├── App.vue                   # 메인 화면
-│   ├── components/               # 컴포넌트
-│   │   ├── features/             # 기능별 컴포넌트 (리팩토링 진행 중)
-│   │   ├── modals/               # 모달 컴포넌트
+│   ├── App.vue                   # 메인 화면 (모듈화 완료)
+│   ├── components/              # 레거시 컴포넌트 (점진적 마이그레이션 중)
 │   │   ├── LoginModal.vue        # 로그인 모달
 │   │   └── SignupModal.vue       # 회원가입 모달
-│   ├── services/                 # API 서비스 레이어 (신규)
-│   │   ├── api.js                # 기본 API 호출 함수
-│   │   └── newsService.js        # 뉴스 관련 API 서비스
+│   ├── modules/                  # 기능별 모듈 (MSA 구조)
+│   │   ├── news/                 # 뉴스 모듈
+│   │   │   └── components/       # AIArticleSearch, EconomyArticleSearch, NewsCollection
+│   │   ├── music-book/           # 음악/도서 모듈
+│   │   │   └── components/       # RadioHistory, BookRecommendation, BookHistory
+│   │   ├── ai-tools/             # AI 도구 모듈
+│   │   │   └── components/       # ScreenValidation, SQLQueryAnalysis, ErrorLogAnalysis, TableImpactAnalysis
+│   │   ├── user-management/      # 사용자 관리 모듈
+│   │   │   ├── components/       # UserManagementModal, CreateApiKeyModal
+│   │   │   ├── components/tabs/  # ProfileTab, DataTab, ApiKeysTab, DbSchemaTab, DockerTab, ErrorLogsTab, DeleteAccountTab
+│   │   │   ├── composables/      # useUserProfile, useUserData, useApiKeys, useDbSchema, useDocker, useErrorLogs
+│   │   │   └── services/         # userService.js
+│   │   ├── layout/               # 레이아웃 모듈
+│   │   │   └── components/       # TopButtons
+│   │   └── shared/               # 공유 모듈
+│   │       └── components/modals/ # DocsLibraryModal, DocViewerModal, MCPGuideModal, ErrorLogDetailModal, EconomyAlarmModal
+│   ├── composables/              # 공통 composables
+│   │   ├── useModal.js           # 모달 상태 관리
+│   │   ├── useFormatting.js      # 포맷팅 유틸리티
+│   │   └── useApi.js             # API 호출 헬퍼
+│   ├── services/                 # 공통 서비스
+│   │   └── baseService.js        # 기본 API 서비스
 │   ├── stores/                   # 상태 관리
 │   │   └── auth.js               # 인증 상태 관리
-│   ├── utils/                    # 유틸리티 함수 (신규)
+│   ├── styles/                   # 스타일 파일
+│   │   ├── base.css              # 기본 스타일
+│   │   └── modules/              # 모듈별 스타일
+│   │       ├── modal.css         # 모달 스타일
+│   │       └── user-management.css # 사용자 관리 스타일
+│   ├── utils/                    # 유틸리티 함수
 │   │   └── helpers.js            # 공통 헬퍼 함수
-│   └── style.css                 # 스타일
+│   └── style.css                 # 메인 스타일 (모듈 스타일 import)
 ├── api-server.js                 # 백엔드 API 서버 (포트 3001)
 ├── database.js                   # SQLite 데이터베이스 관리
 ├── mcp-unified-server.py         # 통합 MCP 서버 (Python)
 ├── mcp-server.js                 # Node.js MCP 서버
 ├── start-dev.bat                 # 개발 환경 실행
+├── MODULE_STRUCTURE.md           # 모듈 구조 가이드
+├── REFACTORING_COMPLETED.md      # 리팩토링 완료 보고서
 └── 가이드.md                      # 통합 가이드 문서
 ```
 
-> **💡 리팩토링 진행 중**: 코드 구조 개선을 위해 컴포넌트와 서비스를 모듈화하고 있습니다. 자세한 내용은 [`코드_구조_개선_계획.md`](./코드_구조_개선_계획.md)를 참조하세요.
+> **✅ 모듈화 완료**: App.vue가 MSA 구조로 완전히 모듈화되었습니다. 자세한 내용은 [`MODULE_STRUCTURE.md`](./MODULE_STRUCTURE.md)와 [`REFACTORING_COMPLETED.md`](./REFACTORING_COMPLETED.md)를 참조하세요.
 
 ## 🔧 서버 포트
 
@@ -248,7 +272,10 @@ Swagger UI: `http://localhost:3001/api-docs`
 - ✅ 코드 중복 제거 및 일관성 향상
 - 📝 자세한 내용: [`MCP_서버_완전_가이드.md`](./MCP_서버_완전_가이드.md)
 
-### 2025년 1월 - 코드 구조 개선
-- ✅ 유틸리티 함수 분리 (`src/utils/helpers.js`)
-- ✅ API 서비스 레이어 생성 (`src/services/`)
-- ✅ 컴포넌트 구조 개선 진행 중
+### 2025년 1월 - MSA 구조 모듈화 완료 ✅
+- ✅ **App.vue 모듈화 완료**: 약 5,025줄 감소 (31% 감소)
+- ✅ **18개 컴포넌트 생성**: 기능별로 모듈화 완료
+- ✅ **모듈 구조 정립**: `src/modules/` 디렉토리 기반 MSA 구조
+- ✅ **공통 인프라 구축**: composables, services, styles 모듈화
+- ✅ **문서화 완료**: MODULE_STRUCTURE.md, REFACTORING_COMPLETED.md 작성
+- 📝 자세한 내용: [`MODULE_STRUCTURE.md`](./MODULE_STRUCTURE.md), [`REFACTORING_COMPLETED.md`](./REFACTORING_COMPLETED.md)
